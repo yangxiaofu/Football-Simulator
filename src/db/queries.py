@@ -1212,6 +1212,14 @@ def delete_contract_years_from_season(
     return cursor.rowcount
 
 
+def get_team_cap_space(conn: sqlite3.Connection, team_id: int) -> int:
+    """Get current cap space for a team."""
+    row = conn.execute(
+        "SELECT cap_space FROM team WHERE id = ?", (team_id,)
+    ).fetchone()
+    return row['cap_space'] if row else 0
+
+
 # ======================
 # SATISFACTION QUERIES
 # ======================
@@ -1752,6 +1760,36 @@ def count_position_tagged_players(
     return row['cnt']
 
 
+def get_player_basic_info(
+    conn: sqlite3.Connection, player_id: int
+) -> Optional[sqlite3.Row]:
+    """Get basic player info (position, name) for tag operations."""
+    return conn.execute(
+        "SELECT position, first_name, last_name FROM player WHERE id = ?",
+        (player_id,)
+    ).fetchone()
+
+
+def mark_contract_as_franchise_tag(
+    conn: sqlite3.Connection, contract_id: int
+) -> None:
+    """Mark a contract as a franchise tag contract."""
+    conn.execute(
+        "UPDATE contract SET is_franchise_tag = 1 WHERE id = ?",
+        (contract_id,)
+    )
+
+
+def get_team_basic_info(
+    conn: sqlite3.Connection, team_id: int
+) -> Optional[sqlite3.Row]:
+    """Get basic team info (city, nickname, cap_space)."""
+    return conn.execute(
+        "SELECT city, nickname, cap_space FROM team WHERE id = ?",
+        (team_id,)
+    ).fetchone()
+
+
 # ======================
 # TRADE QUERIES
 # ======================
@@ -1902,6 +1940,22 @@ def update_contract_team(
         "UPDATE contract SET team_id = ? WHERE id = ?",
         (new_team_id, contract_id),
     )
+
+
+def get_all_teams_ordered(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Get all teams ordered by ID."""
+    return conn.execute("SELECT * FROM team ORDER BY id").fetchall()
+
+
+def count_prospect_red_flags(
+    conn: sqlite3.Connection, prospect_id: int
+) -> int:
+    """Count red flags for a prospect."""
+    row = conn.execute("""
+        SELECT COUNT(*) as cnt FROM scouting_flag
+        WHERE prospect_id = ? AND flag_type = 'red'
+    """, (prospect_id,)).fetchone()
+    return row['cnt'] if row else 0
 
 
 def get_completed_trades_for_team(
@@ -2082,6 +2136,70 @@ def insert_scouted_rating(
           estimated_value, confidence_range, scout_grade, report_week,
           phase, notes))
     return cursor.lastrowid
+
+
+def get_scout_by_id(conn: sqlite3.Connection, scout_id: int) -> Optional[sqlite3.Row]:
+    """Get a scout (staff member) by ID."""
+    return conn.execute(
+        "SELECT * FROM staff WHERE id = ?", (scout_id,)
+    ).fetchone()
+
+
+def get_draft_class_season_year(
+    conn: sqlite3.Connection, draft_class_id: int
+) -> Optional[int]:
+    """Get the season year for a draft class."""
+    row = conn.execute(
+        "SELECT season_year FROM draft_class WHERE id = ?",
+        (draft_class_id,)
+    ).fetchone()
+    return row['season_year'] if row else None
+
+
+def count_scouts_assigned_to_prospect(
+    conn: sqlite3.Connection, prospect_id: int, team_id: int, season_year: int
+) -> int:
+    """Count how many scouts from a team are assigned to a prospect."""
+    row = conn.execute("""
+        SELECT COUNT(*) as cnt FROM scouting_assignment sa
+        JOIN staff s ON sa.scout_id = s.id
+        WHERE sa.prospect_id = ? AND s.team_id = ? AND sa.season_year = ?
+    """, (prospect_id, team_id, season_year)).fetchone()
+    return row['cnt'] if row else 0
+
+
+def update_scouted_rating_notes(
+    conn: sqlite3.Connection, prospect_id: int, scout_id: int,
+    season_year: int, phase: str, report_week: int, notes: str
+) -> None:
+    """Update the notes field for a scouted_rating entry."""
+    conn.execute("""
+        UPDATE scouted_rating SET notes = ?
+        WHERE prospect_id = ? AND scout_id = ? AND season_year = ?
+              AND phase = ? AND report_week = ?
+    """, (notes, prospect_id, scout_id, season_year, phase, report_week))
+
+
+def get_first_scout_assignment_for_prospect(
+    conn: sqlite3.Connection, prospect_id: int, season_year: int
+) -> Optional[sqlite3.Row]:
+    """Get the first scout assignment for a prospect (any team)."""
+    return conn.execute("""
+        SELECT sa.scout_id, s.team_id FROM scouting_assignment sa
+        JOIN staff s ON sa.scout_id = s.id
+        WHERE sa.prospect_id = ? AND sa.season_year = ?
+        LIMIT 1
+    """, (prospect_id, season_year)).fetchone()
+
+
+def get_team_head_scout(
+    conn: sqlite3.Connection, team_id: int
+) -> Optional[sqlite3.Row]:
+    """Get the head scout for a team."""
+    return conn.execute(
+        "SELECT * FROM staff WHERE team_id = ? AND role = 'head_scout' LIMIT 1",
+        (team_id,)
+    ).fetchone()
 
 
 def get_scouted_ratings_for_prospect(
@@ -2499,6 +2617,55 @@ def count_draft_picks_for_season(
     return row['cnt'] if row else 0
 
 
+def get_owned_draft_picks_for_round(
+    conn: sqlite3.Connection,
+    team_id: int,
+    season_year: int,
+    round_num: int
+) -> list[sqlite3.Row]:
+    """Get all unused draft picks owned by a team for a specific round."""
+    return conn.execute("""
+        SELECT * FROM draft_pick
+        WHERE owned_by_team_id = ? AND season_year = ? AND round = ? AND used = 0
+        ORDER BY id
+    """, (team_id, season_year, round_num)).fetchall()
+
+
+def get_draft_pick_used_by_team(
+    conn: sqlite3.Connection,
+    team_id: int,
+    season_year: int,
+    round_num: int
+) -> Optional[sqlite3.Row]:
+    """Get first unused draft pick for team in a round."""
+    return conn.execute("""
+        SELECT id FROM draft_pick
+        WHERE owned_by_team_id = ? AND season_year = ? AND round = ? AND used = 0
+        ORDER BY id LIMIT 1
+    """, (team_id, season_year, round_num)).fetchone()
+
+
+def get_draft_state_by_id(
+    conn: sqlite3.Connection, pick_id: int
+) -> Optional[sqlite3.Row]:
+    """Get draft_state record by ID."""
+    return conn.execute(
+        "SELECT * FROM draft_state WHERE id = ?", (pick_id,)
+    ).fetchone()
+
+
+def get_upcoming_draft_picks(
+    conn: sqlite3.Connection, season_year: int, limit: int = 3
+) -> list[sqlite3.Row]:
+    """Get next N pending picks in draft order."""
+    return conn.execute("""
+        SELECT * FROM draft_state
+        WHERE season_year = ? AND status = 'pending'
+        ORDER BY pick_number_overall
+        LIMIT ?
+    """, (season_year, limit)).fetchall()
+
+
 def get_unsigned_free_agents(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """Get all unsigned free agents with full player info."""
     return conn.execute("""
@@ -2550,7 +2717,24 @@ def mark_offseason_phase_complete(
     conn: sqlite3.Connection, team_id: int, season_year: int,
     phase: str,
 ) -> None:
-    """Set the completion flag for an offseason phase."""
+    """Set the completion flag for an offseason phase.
+
+    Raises:
+        ValueError: If phase is not a valid offseason phase
+    """
+    from ..utils.constants import OFFSEASON_PHASE_SEQUENCE
+
+    # Validate phase against whitelist
+    if phase not in OFFSEASON_PHASE_SEQUENCE:
+        raise ValueError(
+            f"Invalid phase '{phase}'. Must be one of {OFFSEASON_PHASE_SEQUENCE}"
+        )
+
+    # season_ready has no completion column
+    if phase == 'season_ready':
+        return
+
+    # Safe to use f-string after validation
     column = f"{phase}_complete"
     conn.execute(f"""
         UPDATE offseason_state SET {column} = 1
