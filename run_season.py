@@ -40,7 +40,7 @@ from src.league.legacy import update_legacy_score
 from src.ui.standings_display import print_all_standings
 from src.ui.stats_display import print_all_leaders
 from src.generation.schedule import generate_full_schedule
-from src.utils.constants import REGULAR_SEASON_WEEKS, CAP_INFLATION_RATE
+from src.utils.constants import REGULAR_SEASON_WEEKS, CAP_INFLATION_RATE, PLAYOFF_ALREADY_COMPLETE_MSG
 
 
 def cmd_status(conn):
@@ -244,10 +244,21 @@ def cmd_advance_to_playoffs(conn, save_path):
     print("  Run with --simulate-playoffs to begin the postseason.")
 
 
-def cmd_simulate_playoffs(conn, save_path):
+def cmd_simulate_playoffs(conn, save_path, force=False):
     """Run the full playoff bracket."""
     league = get_league_state(conn)
     season_year = league['current_season']
+
+    # Idempotency guard
+    season = get_season(conn, season_year)
+    if season['champion_team_id'] is not None and not force:
+        champion = get_team(conn, season['champion_team_id'])
+        print(PLAYOFF_ALREADY_COMPLETE_MSG.format(
+            year=season_year,
+            team_city=champion['city'],
+            team_nickname=champion['nickname']
+        ))
+        return  # Exit without error
 
     if not is_regular_season_complete(conn, season_year):
         print("  Regular season is not complete. Use --advance-to-playoffs first.")
@@ -298,6 +309,12 @@ def cmd_simulate_playoffs(conn, save_path):
                     with conn:
                         resolve_tier2_question(conn, q['response_id'], choice)
 
+    champion = get_team(conn, champion_id)
+    print(f"\n  🏆 {champion['city']} {champion['nickname']} win the Super Bowl!")
+    print(f"\n  Season {season_year} is complete.")
+    print(f"  Next steps:")
+    print(f"    1. View awards: python run_season.py {save_path} --standings")
+    print(f"    2. Begin offseason: python run_offseason.py {save_path} --start")
     print(f"\n{'='*50}")
 
 
@@ -490,6 +507,9 @@ def main():
     group.add_argument('--complete-season', action='store_true',
                        help='Run full season + playoffs + archive')
 
+    parser.add_argument('--force-playoffs', action='store_true',
+                        help='Force re-simulation of playoffs (overrides idempotency check)')
+
     args = parser.parse_args()
 
     if not os.path.exists(args.save_path):
@@ -510,7 +530,7 @@ def main():
         elif args.advance_to_playoffs:
             cmd_advance_to_playoffs(conn, args.save_path)
         elif args.simulate_playoffs:
-            cmd_simulate_playoffs(conn, args.save_path)
+            cmd_simulate_playoffs(conn, args.save_path, force=args.force_playoffs)
         elif args.complete_season:
             cmd_complete_season(conn, args.save_path)
     except Exception as e:

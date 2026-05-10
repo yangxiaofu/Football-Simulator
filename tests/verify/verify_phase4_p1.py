@@ -94,7 +94,7 @@ def run_tests():
             print(f"  FAIL: {e}")
 
     # -------------------------------------------------------
-    # Test 2: 33 coaches (32 AI + 1 player)
+    # Test 2: 32 coaches (31 AI + 1 player) - one per team
     # -------------------------------------------------------
     print("Test 2: Coach count...")
     total = conn.execute("SELECT COUNT(*) FROM coach_career").fetchone()[0]
@@ -105,10 +105,10 @@ def run_tests():
         "SELECT COUNT(*) FROM coach_career WHERE is_player = 1"
     ).fetchone()[0]
 
-    if total != 33:
-        errors.append(f"Expected 33 coaches, got {total}")
-    if ai_count != 32:
-        errors.append(f"Expected 32 AI coaches, got {ai_count}")
+    if total != 32:
+        errors.append(f"Expected 32 coaches, got {total}")
+    if ai_count != 31:
+        errors.append(f"Expected 31 AI coaches, got {ai_count}")
     if player_count != 1:
         errors.append(f"Expected 1 player coach, got {player_count}")
     if not errors:

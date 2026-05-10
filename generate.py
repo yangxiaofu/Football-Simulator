@@ -21,6 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.db import get_connection, init_database
+from src.db.queries import get_team_by_abbreviation
 from src.generation import (
     generate_all_teams,
     generate_all_rosters,
@@ -48,6 +49,8 @@ def main():
     parser.add_argument('--coach-archetype', type=str, default=None,
                         choices=list(GM_PERSONALITIES_TUPLE),
                         help='Player coach personality archetype (default: "analytics")')
+    parser.add_argument('--team', type=str, default=None,
+                        help='3-letter abbreviation of user team (e.g., CLE, CHI). Default: first team.')
     args = parser.parse_args()
 
     save_path = args.save_path
@@ -101,10 +104,28 @@ def main():
             print(f"✓ Generated {total_games} games across {17} weeks")
             print()
 
-            # Query user_team_id FIRST (needed for AI coach generation)
-            user_team_id = conn.execute(
-                "SELECT user_team_id FROM league WHERE id = 1"
-            ).fetchone()[0]
+            # Determine user team
+            if args.team:
+                team_row = get_team_by_abbreviation(conn, args.team)
+                if not team_row:
+                    print(f"\n❌ Error: Team abbreviation '{args.team}' not found.")
+                    print("Available teams:")
+                    all_teams = conn.execute("SELECT abbreviation, city, nickname FROM team ORDER BY abbreviation").fetchall()
+                    for t in all_teams:
+                        print(f"  {t[0]:3s} - {t[1]} {t[2]}")
+                    return 1
+                user_team_id = team_row['id']
+                # Update league.user_team_id
+                conn.execute("UPDATE league SET user_team_id = ? WHERE id = 1", (user_team_id,))
+                print(f"User team: {team_row['city']} {team_row['nickname']} ({team_row['abbreviation']})")
+            else:
+                # Default to first team (already set by generate_all_teams)
+                user_team_id = conn.execute(
+                    "SELECT user_team_id FROM league WHERE id = 1"
+                ).fetchone()[0]
+                first_team = conn.execute("SELECT city, nickname, abbreviation FROM team WHERE id = ?", (user_team_id,)).fetchone()
+                print(f"⚠️  No --team specified. Defaulting to {first_team[1]} {first_team[2]} ({first_team[0]}).")
+                print(f"   Use --team {first_team[0]} to explicitly select this team.\n")
 
             print("Generating AI coaches for all teams (excluding user team)...")
             ai_coach_ids = generate_ai_coaches(conn, season_year, team_ids, skip_team_id=user_team_id)
@@ -127,11 +148,15 @@ def main():
             print(f"✓ Created player coach: {coach_first} {coach_last} ({coach_arch})")
             print()
 
+        # Get final team abbreviation for help text
+        final_team = conn.execute("SELECT abbreviation FROM team WHERE id = ?", (user_team_id,)).fetchone()
+        team_abbr = final_team[0]
+
         print("=" * 60)
         print("✅ Franchise generation complete!")
         print()
         print("To query a roster, run:")
-        print(f"  python query_roster.py {save_path} --team CHI")
+        print(f"  python query_roster.py {save_path} --team {team_abbr}")
 
     except Exception as e:
         print(f"❌ Error during generation: {e}")

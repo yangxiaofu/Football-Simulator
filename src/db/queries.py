@@ -160,6 +160,14 @@ def get_team(conn: sqlite3.Connection, team_id: int) -> Optional[sqlite3.Row]:
     return conn.execute("SELECT * FROM team WHERE id = ?", (team_id,)).fetchone()
 
 
+def get_team_by_abbreviation(conn: sqlite3.Connection, abbreviation: str) -> Optional[sqlite3.Row]:
+    """Get a team by its 3-letter abbreviation (case-insensitive)."""
+    return conn.execute(
+        "SELECT * FROM team WHERE UPPER(abbreviation) = UPPER(?)",
+        (abbreviation,)
+    ).fetchone()
+
+
 def get_team_division(conn: sqlite3.Connection, team_id: int) -> Optional[sqlite3.Row]:
     """Get the division for a team."""
     return conn.execute("""

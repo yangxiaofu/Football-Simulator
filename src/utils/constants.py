@@ -301,6 +301,12 @@ SUPERBOWL_WEEK = 21  # Week number for Super Bowl
 
 PLAYOFF_ROUNDS = ['wildcard', 'divisional', 'conference', 'superbowl']
 
+# Schedule generation
+MAX_GAMES_PER_TEAM_PER_WEEK = 1  # Hard constraint: no team plays >1 game per week
+EXPECTED_GAMES_PER_TEAM = 17     # Regular season games per team
+EXPECTED_TOTAL_GAMES = 272       # 32 teams × 17 games / 2
+GAMES_PER_WEEK_TARGET = 16       # 272 games / 17 weeks
+
 # Wildcard round matchup structure: (higher_seed, lower_seed) — higher seed hosts
 WILDCARD_MATCHUP_PAIRS = [(2, 7), (3, 6), (4, 5)]
 
@@ -313,6 +319,13 @@ PLAYOFF_WEEK_NUMBERS = {
     'conference': 20,
     'superbowl': 21,
 }
+
+# Playoff CLI messages
+PLAYOFF_ALREADY_COMPLETE_MSG = (
+    "Playoffs for season {year} are already complete.\n"
+    "  Champion: {team_city} {team_nickname}\n"
+    "  Use 'python run_offseason.py <save>' to begin the offseason."
+)
 
 # ======================
 # PLAY LOG & ARCHIVAL
