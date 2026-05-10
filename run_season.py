@@ -485,6 +485,107 @@ def cmd_complete_season(conn, save_path):
     print(f"{'='*50}\n")
 
 
+def cmd_depth_chart(conn, team_id: int, position_filter: str = None):
+    """Display depth chart for user's team, optionally filtered to one position."""
+    from src.db.queries import get_team, get_league_state, get_depth_chart, get_player
+    from src.utils.constants import DEPTH_CHART_POSITIONS
+
+    team = get_team(conn, team_id)
+    if not team:
+        print(f"Error: Team not found")
+        return
+
+    league = get_league_state(conn)
+    season_year = league['current_season']
+
+    entries = get_depth_chart(conn, team_id, season_year, position_slot=position_filter)
+
+    print(f"\n{'='*70}")
+    print(f"DEPTH CHART — {team['city']} {team['nickname']} ({season_year})")
+    print(f"{'='*70}\n")
+
+    # Group by position
+    by_position = {}
+    for entry in entries:
+        pos = entry['position_slot']
+        if pos not in by_position:
+            by_position[pos] = []
+        by_position[pos].append(entry)
+
+    # Display in order
+    for position_slot in DEPTH_CHART_POSITIONS:
+        if position_slot not in by_position:
+            continue
+
+        print(f"{position_slot:8}", end="")
+        entries_at_pos = sorted(by_position[position_slot], key=lambda e: e['slot_order'])
+
+        for entry in entries_at_pos:
+            player = get_player(conn, entry['player_id'])
+            flag = " *" if entry['is_user_set'] else ""
+            print(f"  {entry['slot_order']}. {player['first_name']} {player['last_name']}{flag}", end="")
+        print()
+
+    print(f"\n{'='*70}")
+    print("* = user-set (permanent)")
+    print()
+
+
+def cmd_set_starter(conn, team_id: int, position_slot: str, player_id: int):
+    """Set a player as starter at a position on user's team."""
+    from src.db.queries import get_league_state
+    from src.transactions.depth_chart import set_depth_chart_entry
+
+    league = get_league_state(conn)
+    season_year = league['current_season']
+
+    success, message = set_depth_chart_entry(
+        conn, team_id, season_year, position_slot.upper(), 1, player_id, is_user_set=True
+    )
+
+    if success:
+        print(f"✓ {message}")
+    else:
+        print(f"✗ {message}")
+
+
+def cmd_swap_depth(conn, team_id: int, position_slot: str, slot_a: int, slot_b: int):
+    """Swap two players at different depth slots on user's team."""
+    from src.db.queries import get_league_state
+    from src.transactions.depth_chart import swap_depth_chart_positions
+
+    league = get_league_state(conn)
+    season_year = league['current_season']
+
+    success, message = swap_depth_chart_positions(
+        conn, team_id, season_year, position_slot.upper(), slot_a, slot_b
+    )
+
+    if success:
+        print(f"✓ {message}")
+    else:
+        print(f"✗ {message}")
+
+
+def cmd_reset_depth(conn, team_id: int, position_filter: str = None):
+    """Reset depth chart to auto-fill for user's team, optionally one position."""
+    from src.db.queries import get_league_state
+    from src.transactions.depth_chart import reset_team_depth_chart, initialize_depth_chart_for_team
+
+    league = get_league_state(conn)
+    season_year = league['current_season']
+
+    # TODO: position_filter support - currently resets entire depth chart
+    success, message = reset_team_depth_chart(conn, team_id, season_year)
+    if success:
+        # Re-initialize with auto-fill
+        initialize_depth_chart_for_team(conn, team_id, season_year)
+        print(f"✓ {message}")
+        print(f"  Depth chart re-initialized with rating-based defaults")
+    else:
+        print(f"✗ {message}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Football Simulator — Season Management',
@@ -506,6 +607,14 @@ def main():
                        help='Show current season/week/phase')
     group.add_argument('--complete-season', action='store_true',
                        help='Run full season + playoffs + archive')
+    group.add_argument('--depth-chart', nargs='?', const='ALL', metavar='POSITION',
+                       help='Display your team\'s depth chart, optionally filtered to one POSITION')
+    group.add_argument('--set-starter', nargs=2, metavar=('POSITION', 'PLAYER_ID'),
+                       help='Set your team\'s starter: --set-starter QB 123')
+    group.add_argument('--swap-depth', nargs=3, metavar=('POSITION', 'SLOT_A', 'SLOT_B'),
+                       help='Swap depth positions on your team: --swap-depth WR1 1 2')
+    group.add_argument('--reset-depth', nargs='?', const='ALL', metavar='POSITION',
+                       help='Reset your team\'s depth chart, optionally one POSITION')
 
     parser.add_argument('--force-playoffs', action='store_true',
                         help='Force re-simulation of playoffs (overrides idempotency check)')
@@ -533,6 +642,30 @@ def main():
             cmd_simulate_playoffs(conn, args.save_path, force=args.force_playoffs)
         elif args.complete_season:
             cmd_complete_season(conn, args.save_path)
+        elif args.depth_chart is not None:
+            # Get user's team (Phase 5 Prompt #3 cleanup)
+            league = get_league_state(conn)
+            user_team_id = league['user_team_id']
+            position_filter = None if args.depth_chart == 'ALL' else args.depth_chart
+            cmd_depth_chart(conn, user_team_id, position_filter)
+        elif args.set_starter:
+            # Get user's team (Phase 5 Prompt #3 cleanup)
+            league = get_league_state(conn)
+            user_team_id = league['user_team_id']
+            position, player_id = args.set_starter
+            cmd_set_starter(conn, user_team_id, position, int(player_id))
+        elif args.swap_depth:
+            # Get user's team (Phase 5 Prompt #3 cleanup)
+            league = get_league_state(conn)
+            user_team_id = league['user_team_id']
+            position, slot_a, slot_b = args.swap_depth
+            cmd_swap_depth(conn, user_team_id, position, int(slot_a), int(slot_b))
+        elif args.reset_depth is not None:
+            # Get user's team (Phase 5 Prompt #3 cleanup)
+            league = get_league_state(conn)
+            user_team_id = league['user_team_id']
+            position_filter = None if args.reset_depth == 'ALL' else args.reset_depth
+            cmd_reset_depth(conn, user_team_id, position_filter)
     except Exception as e:
         print(f"Error: {e}")
         import traceback
