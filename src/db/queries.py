@@ -2804,3 +2804,583 @@ def get_legacy_score_delta(
         'previous_score': previous_score,
         'delta': current_score - previous_score,
     }
+
+
+# ====================
+# AI GM BEHAVIOR QUERIES (Phase 4 Prompt #3)
+# ====================
+
+
+def get_roster_average_age(
+    conn: sqlite3.Connection, team_id: int,
+) -> float:
+    """Average age of active roster players for a team.
+
+    Returns 0.0 if the team has no active players.
+    """
+    row = conn.execute("""
+        SELECT AVG(age) AS avg_age FROM player
+        WHERE team_id = ? AND roster_status = 'active' AND is_active = 1
+    """, (team_id,)).fetchone()
+    return float(row['avg_age']) if row and row['avg_age'] is not None else 0.0
+
+
+def get_star_count(
+    conn: sqlite3.Connection, team_id: int, threshold: int,
+) -> int:
+    """Count active players on team with true_overall >= threshold."""
+    row = conn.execute("""
+        SELECT COUNT(*) AS cnt FROM player
+        WHERE team_id = ? AND roster_status = 'active' AND is_active = 1
+              AND true_overall >= ?
+    """, (team_id, threshold)).fetchone()
+    return row['cnt'] if row else 0
+
+
+def get_recent_win_pct(
+    conn: sqlite3.Connection, team_id: int, n_seasons: int,
+) -> float:
+    """Average win percentage over the N most recent completed seasons.
+
+    Returns 0.5 if no season records exist.
+    """
+    rows = conn.execute("""
+        SELECT wins, losses FROM team_season_record
+        WHERE team_id = ?
+        ORDER BY season_year DESC
+        LIMIT ?
+    """, (team_id, n_seasons)).fetchall()
+    if not rows:
+        return 0.5
+    total_wins = sum(r['wins'] for r in rows)
+    total_games = sum(r['wins'] + r['losses'] for r in rows)
+    if total_games == 0:
+        return 0.5
+    return total_wins / total_games
+
+
+def get_consecutive_losing_seasons(
+    conn: sqlite3.Connection, team_id: int,
+) -> int:
+    """Count consecutive losing seasons from the most recent backward.
+
+    A losing season has wins < losses. Returns 0 if most recent is .500+.
+    """
+    rows = conn.execute("""
+        SELECT wins, losses FROM team_season_record
+        WHERE team_id = ?
+        ORDER BY season_year DESC
+    """, (team_id,)).fetchall()
+    streak = 0
+    for row in rows:
+        if row['wins'] < row['losses']:
+            streak += 1
+        else:
+            break
+    return streak
+
+
+def get_consecutive_seasons_no_playoffs(
+    conn: sqlite3.Connection, team_id: int,
+) -> int:
+    """Count consecutive seasons missing playoffs from most recent backward.
+
+    Returns 0 if team made playoffs in most recent season.
+    """
+    rows = conn.execute("""
+        SELECT made_playoffs FROM team_season_record
+        WHERE team_id = ?
+        ORDER BY season_year DESC
+    """, (team_id,)).fetchall()
+    streak = 0
+    for row in rows:
+        if not row['made_playoffs']:
+            streak += 1
+        else:
+            break
+    return streak
+
+
+def get_team_coach(
+    conn: sqlite3.Connection, team_id: int,
+) -> Optional[sqlite3.Row]:
+    """Get the active coach assigned to a team, or None."""
+    return conn.execute("""
+        SELECT * FROM coach_career
+        WHERE current_team_id = ? AND is_active = 1
+        LIMIT 1
+    """, (team_id,)).fetchone()
+
+
+def get_coach_tenure_length(
+    conn: sqlite3.Connection, coach_id: int, current_year: int,
+) -> int:
+    """Years in current (open) tenure for a coach.
+
+    Returns 0 if no open tenure exists.
+    """
+    row = conn.execute("""
+        SELECT start_year FROM coach_tenure
+        WHERE coach_id = ? AND end_year IS NULL
+        LIMIT 1
+    """, (coach_id,)).fetchone()
+    if not row:
+        return 0
+    return current_year - row['start_year']
+
+
+def update_team_phase(
+    conn: sqlite3.Connection, team_id: int, phase: str,
+) -> None:
+    """Write team.team_phase for a team."""
+    conn.execute(
+        "UPDATE team SET team_phase = ? WHERE id = ?",
+        (phase, team_id),
+    )
+
+
+# ==============================
+# OWNER SENTIMENT (Phase 4 Prompt #4)
+# ==============================
+
+def get_owner_sentiment(
+    conn: sqlite3.Connection, team_id: int, season_year: int,
+) -> Optional[sqlite3.Row]:
+    """Get owner sentiment record for a team-season."""
+    return conn.execute("""
+        SELECT * FROM owner_sentiment
+        WHERE team_id = ? AND season_year = ?
+    """, (team_id, season_year)).fetchone()
+
+
+def insert_owner_sentiment(
+    conn: sqlite3.Connection, team_id: int, season_year: int,
+    expectation_tier: Optional[str] = None, sentiment_score: int = 70,
+) -> None:
+    """Initialize owner sentiment for a team-season."""
+    conn.execute("""
+        INSERT INTO owner_sentiment
+        (team_id, season_year, sentiment_score, preseason_expectation, hot_seat_tier)
+        VALUES (?, ?, ?, ?, 'stable')
+    """, (team_id, season_year, sentiment_score, expectation_tier))
+
+
+def update_sentiment_drivers(
+    conn: sqlite3.Connection, team_id: int, season_year: int,
+    **drivers,
+) -> None:
+    """Update individual driver scores for sentiment calculation."""
+    set_clause = ', '.join([f"{key} = ?" for key in drivers.keys()])
+    values = list(drivers.values()) + [team_id, season_year]
+    conn.execute(f"""
+        UPDATE owner_sentiment
+        SET {set_clause}
+        WHERE team_id = ? AND season_year = ?
+    """, values)
+
+
+def update_sentiment_score_and_tier(
+    conn: sqlite3.Connection, team_id: int, season_year: int,
+    score: int, tier: str,
+) -> None:
+    """Write final sentiment score and hot seat tier."""
+    conn.execute("""
+        UPDATE owner_sentiment
+        SET sentiment_score = ?, hot_seat_tier = ?
+        WHERE team_id = ? AND season_year = ?
+    """, (score, tier, team_id, season_year))
+
+
+def get_star_holdouts_count(conn: sqlite3.Connection, team_id: int) -> int:
+    """Count active holdout events for stars (true_overall >= 90)."""
+    return conn.execute("""
+        SELECT COUNT(*) as cnt
+        FROM player_event pe
+        JOIN player p ON pe.player_id = p.id
+        WHERE pe.team_id = ?
+          AND pe.event_type = 'holdout'
+          AND pe.resolved = 0
+          AND p.true_overall >= 90
+    """, (team_id,)).fetchone()['cnt']
+
+
+# ==============================
+# COACH JOB OFFERS (Phase 4 Prompt #4)
+# ==============================
+
+def insert_coach_job_offer(
+    conn: sqlite3.Connection, coach_id: int, team_id: int,
+    season_year: int, week: int, quality: str,
+) -> int:
+    """Create a job offer for a vacant coach."""
+    cursor = conn.execute("""
+        INSERT INTO coach_job_offer
+        (coach_id, team_id, season_year, week_offered, offer_quality_tier)
+        VALUES (?, ?, ?, ?, ?)
+    """, (coach_id, team_id, season_year, week, quality))
+    return cursor.lastrowid
+
+
+def get_pending_offers_for_coach(
+    conn: sqlite3.Connection, coach_id: int, season_year: int,
+) -> list[sqlite3.Row]:
+    """Get all unresolved offers for a coach in a season."""
+    return conn.execute("""
+        SELECT * FROM coach_job_offer
+        WHERE coach_id = ? AND season_year = ?
+          AND is_accepted = 0 AND is_declined = 0
+        ORDER BY offer_quality_tier DESC
+    """, (coach_id, season_year)).fetchall()
+
+
+def accept_offer(conn: sqlite3.Connection, offer_id: int) -> None:
+    """Mark an offer as accepted."""
+    conn.execute(
+        "UPDATE coach_job_offer SET is_accepted = 1 WHERE id = ?",
+        (offer_id,),
+    )
+
+
+def decline_offer(conn: sqlite3.Connection, offer_id: int) -> None:
+    """Mark an offer as declined."""
+    conn.execute(
+        "UPDATE coach_job_offer SET is_declined = 1 WHERE id = ?",
+        (offer_id,),
+    )
+
+
+def decline_all_other_offers(
+    conn: sqlite3.Connection, coach_id: int, season_year: int, except_id: int,
+) -> None:
+    """Decline all pending offers except the accepted one."""
+    conn.execute("""
+        UPDATE coach_job_offer
+        SET is_declined = 1
+        WHERE coach_id = ? AND season_year = ?
+          AND id != ? AND is_accepted = 0 AND is_declined = 0
+    """, (coach_id, season_year, except_id))
+
+
+def get_coach_legacy_score(conn: sqlite3.Connection, coach_id: int) -> Optional[int]:
+    """Get most recent legacy score for a coach."""
+    row = conn.execute("""
+        SELECT total_legacy_score FROM legacy_score
+        WHERE coach_id = ?
+        ORDER BY season_year DESC
+        LIMIT 1
+    """, (coach_id,)).fetchone()
+    return row['total_legacy_score'] if row else None
+
+
+def compute_legacy_quartile(conn: sqlite3.Connection, coach_id: int) -> int:
+    """Compute legacy quartile (1-4) relative to all coaches.
+
+    Returns:
+        4 = top 25%, 3 = 25-50%, 2 = 50-75%, 1 = bottom 25%
+    """
+    my_score = get_coach_legacy_score(conn, coach_id)
+    if my_score is None:
+        return 1
+
+    all_scores = conn.execute("""
+        SELECT DISTINCT coach_id, MAX(total_legacy_score) as score
+        FROM legacy_score
+        WHERE coach_id IS NOT NULL
+        GROUP BY coach_id
+        ORDER BY score DESC
+    """).fetchall()
+
+    if not all_scores:
+        return 1
+
+    scores_list = [row['score'] for row in all_scores]
+    rank = sum(1 for s in scores_list if s > my_score)
+    percentile = rank / len(scores_list)
+
+    if percentile < 0.25:
+        return 4
+    elif percentile < 0.50:
+        return 3
+    elif percentile < 0.75:
+        return 2
+    else:
+        return 1
+
+
+def get_coach_by_id(conn: sqlite3.Connection, coach_id: int) -> Optional[sqlite3.Row]:
+    """Get a coach_career record by ID."""
+    return conn.execute(
+        "SELECT * FROM coach_career WHERE id = ?",
+        (coach_id,),
+    ).fetchone()
+
+
+def get_vacant_coaches(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Get all active coaches with no current team (vacancy state)."""
+    return conn.execute("""
+        SELECT * FROM coach_career
+        WHERE is_active = 1 AND current_team_id IS NULL
+    """).fetchall()
+
+
+# ==============================
+# COACH LEGACY EXPANSION (Phase 4 Prompt #7)
+# ==============================
+
+def insert_coach_legacy_score(
+    conn: sqlite3.Connection,
+    coach_id: int,
+    season_year: int,
+    team_id: int,
+    factors: dict,
+    multipliers: dict,
+    score: int,
+) -> int:
+    """Insert a coach legacy score row.
+
+    Args:
+        factors: dict with keys: championships, conference_titles, season_win_pct,
+                 stars_developed, cap_efficiency_score, media_legacy_score
+        multipliers: dict with keys: era_difficulty_multiplier, starting_condition_multiplier
+        score: computed season_legacy_score
+
+    Returns:
+        ID of inserted row
+    """
+    cursor = conn.execute("""
+        INSERT INTO coach_legacy_score (
+            coach_id, season_year, team_id,
+            championships, conference_titles, season_win_pct,
+            stars_developed, cap_efficiency_score, media_legacy_score,
+            era_difficulty_multiplier, starting_condition_multiplier,
+            season_legacy_score
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        coach_id, season_year, team_id,
+        factors['championships'], factors['conference_titles'], factors['season_win_pct'],
+        factors['stars_developed'], factors['cap_efficiency_score'], factors['media_legacy_score'],
+        multipliers['era_difficulty_multiplier'], multipliers['starting_condition_multiplier'],
+        score,
+    ))
+    return cursor.lastrowid
+
+
+def get_coach_legacy_scores(
+    conn: sqlite3.Connection, coach_id: int,
+) -> list[sqlite3.Row]:
+    """Get all season legacy scores for a coach."""
+    return conn.execute("""
+        SELECT * FROM coach_legacy_score
+        WHERE coach_id = ?
+        ORDER BY season_year
+    """, (coach_id,)).fetchall()
+
+
+def get_all_active_coaches(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Get all active coaches."""
+    return conn.execute("""
+        SELECT * FROM coach_career
+        WHERE is_active = 1
+    """).fetchall()
+
+
+def insert_narrative_beat(
+    conn: sqlite3.Connection,
+    coach_id: int,
+    season_year: int,
+    beat_type: str,
+    text: str,
+) -> int:
+    """Insert a narrative beat for a coach's season."""
+    cursor = conn.execute("""
+        INSERT INTO coach_narrative_beat (coach_id, season_year, beat_type, text)
+        VALUES (?, ?, ?, ?)
+    """, (coach_id, season_year, beat_type, text))
+    return cursor.lastrowid
+
+
+def get_narrative_beats_for_coach(
+    conn: sqlite3.Connection, coach_id: int,
+) -> list[sqlite3.Row]:
+    """Get all narrative beats for a coach."""
+    return conn.execute("""
+        SELECT * FROM coach_narrative_beat
+        WHERE coach_id = ?
+        ORDER BY season_year
+    """, (coach_id,)).fetchall()
+
+
+def insert_peer_ranking(
+    conn: sqlite3.Connection,
+    coach_id: int,
+    season_year: int,
+    career_total: int,
+    active_rank: int,
+    all_time_rank: int,
+    n_active: int,
+    n_all_time: int,
+) -> int:
+    """Insert a peer ranking snapshot."""
+    cursor = conn.execute("""
+        INSERT INTO peer_ranking_snapshot (
+            coach_id, season_year, career_legacy_total,
+            active_rank, all_time_rank, n_active, n_all_time
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (coach_id, season_year, career_total, active_rank, all_time_rank, n_active, n_all_time))
+    return cursor.lastrowid
+
+
+def get_peer_ranking(
+    conn: sqlite3.Connection, coach_id: int, season_year: int,
+) -> Optional[sqlite3.Row]:
+    """Get peer ranking snapshot for a coach in a season."""
+    return conn.execute("""
+        SELECT * FROM peer_ranking_snapshot
+        WHERE coach_id = ? AND season_year = ?
+    """, (coach_id, season_year)).fetchone()
+
+
+def get_all_team_season_records(
+    conn: sqlite3.Connection, season_year: int,
+) -> list[sqlite3.Row]:
+    """Get all team season records for a given season."""
+    return conn.execute("""
+        SELECT * FROM team_season_record
+        WHERE season_year = ?
+    """, (season_year,)).fetchall()
+
+
+def get_team_prior_season_wpct(
+    conn: sqlite3.Connection, team_id: int, season_year: int,
+) -> Optional[float]:
+    """Get a team's win percentage from the prior season.
+
+    Args:
+        season_year: Current season (will look at season_year - 1)
+
+    Returns:
+        Win percentage (0.0-1.0) or None if no record exists
+    """
+    prior_year = season_year - 1
+    row = conn.execute("""
+        SELECT wins, losses, ties FROM team_season_record
+        WHERE team_id = ? AND season_year = ?
+    """, (team_id, prior_year)).fetchone()
+
+    if not row:
+        return None
+
+    total_games = row['wins'] + row['losses'] + row['ties']
+    if total_games == 0:
+        return None
+
+    return (row['wins'] + row['ties'] * 0.5) / total_games
+
+
+# ====================
+# HISTORICAL RECORDS (Phase 4 Prompt #8)
+# ====================
+
+def upsert_league_record(
+    conn: sqlite3.Connection,
+    category: str,
+    scope: str,
+    record_value: float,
+    holder_player_id: Optional[int],
+    holder_team_id: Optional[int],
+    holder_coach_id: Optional[int],
+    holder_name: str,
+    season_year: int,
+    week_number: Optional[int],
+) -> None:
+    """Insert or replace league_record row."""
+    conn.execute("""
+        INSERT OR REPLACE INTO league_record
+        (category, scope, record_value, holder_player_id, holder_team_id,
+         holder_coach_id, holder_name, season_year, week_number)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (category, scope, record_value, holder_player_id, holder_team_id,
+          holder_coach_id, holder_name, season_year, week_number))
+
+
+def get_league_record(
+    conn: sqlite3.Connection, category: str, scope: str,
+) -> Optional[sqlite3.Row]:
+    """Get existing record for category × scope."""
+    return conn.execute("""
+        SELECT * FROM league_record
+        WHERE category = ? AND scope = ?
+    """, (category, scope)).fetchone()
+
+
+def get_max_stat_single_game(
+    conn: sqlite3.Connection, column_name: str, season_year: int,
+) -> Optional[sqlite3.Row]:
+    """Get MAX(stat) from box_score for given season.
+
+    Returns row with max value, player_id, game_id, week_number.
+    """
+    return conn.execute(f"""
+        SELECT
+            bs.{column_name} AS max_value,
+            bs.player_id,
+            bs.game_id,
+            w.week_number,
+            p.first_name || ' ' || p.last_name AS player_name,
+            t.abbreviation AS team_abbr
+        FROM box_score bs
+        JOIN game g ON bs.game_id = g.id
+        JOIN week w ON g.week_id = w.id
+        JOIN player p ON bs.player_id = p.id
+        JOIN team t ON bs.team_id = t.id
+        WHERE w.season_id = (SELECT id FROM season WHERE year = ?)
+          AND bs.{column_name} > 0
+        ORDER BY bs.{column_name} DESC
+        LIMIT 1
+    """, (season_year,)).fetchone()
+
+
+def get_max_stat_single_season(
+    conn: sqlite3.Connection, column_name: str, season_year: int,
+) -> Optional[sqlite3.Row]:
+    """Get MAX(stat) from player_season_stats for given season.
+
+    Returns row with max value, player_id, season_year.
+    """
+    return conn.execute(f"""
+        SELECT
+            pss.{column_name} AS max_value,
+            pss.player_id,
+            pss.season_year,
+            p.first_name || ' ' || p.last_name AS player_name,
+            t.abbreviation AS team_abbr
+        FROM player_season_stats pss
+        JOIN player p ON pss.player_id = p.id
+        JOIN team t ON pss.team_id = t.id
+        WHERE pss.season_year = ?
+          AND pss.{column_name} > 0
+        ORDER BY pss.{column_name} DESC
+        LIMIT 1
+    """, (season_year,)).fetchone()
+
+
+def get_max_stat_career(
+    conn: sqlite3.Connection, column_name: str,
+) -> Optional[sqlite3.Row]:
+    """Get MAX(career_{stat}) from player_career_stats (all time).
+
+    Returns row with max value, player_id.
+    """
+    return conn.execute(f"""
+        SELECT
+            pcs.career_{column_name} AS max_value,
+            pcs.player_id,
+            p.first_name || ' ' || p.last_name AS player_name,
+            t.abbreviation AS team_abbr
+        FROM player_career_stats pcs
+        JOIN player p ON pcs.player_id = p.id
+        LEFT JOIN team t ON p.team_id = t.id
+        WHERE pcs.career_{column_name} > 0
+        ORDER BY pcs.career_{column_name} DESC
+        LIMIT 1
+    """).fetchone()

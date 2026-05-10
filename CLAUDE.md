@@ -27,7 +27,10 @@ Save format: One `.db` file per franchise (SQLite database)
 ├── run_season.py          ← CLI: season management (Phase 2)
 ├── run_offseason.py       ← CLI: offseason management (Phase 3)
 ├── verify_phase4_p1.py    ← verification: Phase 4 prompt #1 (coach identity)
+├── verify_phase4_p3.py    ← verification: Phase 4 prompt #3 (AI GM behavior)
+├── verify_phase4_p8.py    ← verification: Phase 4 prompt #8 (historical records)
 ├── run_stress_test.py     ← CLI: multi-season stress test (Phase 4)
+├── view_records.py        ← CLI: league records and history viewer (Phase 4)
 ├── docs/                  ← Game Design Documents (read before implementing any system)
 │   ├── GDD_Layer1_CoreDesign.md
 │   ├── GDD_Layer2_SimulationSpec.md
@@ -69,7 +72,9 @@ Save format: One `.db` file per franchise (SQLite database)
 │   │   ├── offseason.py         ← offseason loop orchestrator, phase sequencing
 │   │   ├── invariants.py        ← 12-invariant battery
 │   │   ├── health_report.py     ← League Health Report generator
-│   │   └── stress_harness.py    ← headless multi-season orchestrator
+│   │   ├── stress_harness.py    ← headless multi-season orchestrator
+│   │   ├── team_phase.py        ← team phase classifier (rebuild/bridge/contend/win_now/decline)
+│   │   └── historical_records.py ← league records, leaderboards, champion history (Phase 4)
 │   ├── transactions/      ← trades, free agency, contracts, draft, coaching
 │   │   ├── contracts.py         ← contract signing, restructuring, release, market value
 │   │   ├── satisfaction.py      ← weekly evaluation, warning signals, interventions, contagion
@@ -77,7 +82,8 @@ Save format: One `.db` file per franchise (SQLite database)
 │   │   ├── franchise_tag.py     ← exclusive/transition tags, salary calculation, consecutive tags
 │   │   ├── trades.py            ← trade value, evaluation, GM personality, AI offers, execution
 │   │   ├── draft.py             ← draft loop, pick selection, AI picks, rookie contracts
-│   │   └── coaching.py          ← coach assignment, tenure tracking, personality sync (Phase 4)
+│   │   ├── coaching.py          ← coach assignment, tenure tracking, personality sync (Phase 4)
+│   │   └── coaching_carousel.py ← AI coach fire/hire based on performance (Phase 4)
 │   ├── scouting/          ← draft class generation, scouting reports, draft board
 │   │   ├── prospects.py         ← draft class generation, prospect attributes, combine
 │   │   ├── scouts.py            ← scout assignment, accuracy tiers, flag detection, UI-safe views
@@ -88,6 +94,8 @@ Save format: One `.db` file per franchise (SQLite database)
 │   │   ├── stats_display.py     ← stat leaderboards
 │   │   └── roster_display.py    ← roster with contracts
 │   └── utils/             ← shared helpers, constants, probability functions
+│       ├── constants.py         ← all tuning constants, thresholds, position lists
+│       └── ai_behavior_matrix.py ← 5x5 personality×phase behavior grid (Phase 4)
 ├── saves/                 ← franchise .db files (gitignored)
 └── assets/                ← future UI assets (logos, fonts)
 ```
@@ -244,9 +252,14 @@ Goal: Coach identity as a first-class entity, portable careers, media/pressure s
 - [x] Verification passing: `python verify_phase4_p1.py` exits 0
 - [x] Multi-season stress harness + invariant battery + League Health Report
 - [x] Baseline bug fixes (Inv 4, Inv 8, Inv 12 cascade) — `verify_phase4_p2_5.py` passing
-- [ ] Hiring/firing system with coaching carousel
+- [x] AI GM behavior matrix (`src/utils/ai_behavior_matrix.py` — 25-cell personality×phase grid)
+- [x] Team phase classifier (`src/league/team_phase.py` — rebuild/bridge/contend/win_now/decline)
+- [x] Coaching carousel (`src/transactions/coaching_carousel.py` — AI coach fire/hire)
+- [x] Phase-aware trade/FA/draft logic (behavior matrix multipliers in trades, free_agency, draft)
+- [x] Verification passing: `python verify_phase4_p3.py` exits 0
+- [x] 3-season stress test passing: 12/12 invariants, 10 coaching changes, 3 distinct phases
+- [x] Historical records module (record book, leaderboards, champion history, CLI viewer)
 - [ ] Media pressure and hot seat system
-- [ ] 3-season stability testing
 - [ ] Legacy score integration with coach identity
 
 ---

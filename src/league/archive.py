@@ -63,6 +63,11 @@ def archive_season(
     mark_season_complete(conn, season_year)
     print(f"    Season {season_year} marked complete")
 
+    # Step 7: Update league records (Phase 4 Prompt #8)
+    from .historical_records import update_league_records
+    broken_records = update_league_records(conn, season_year)
+    print("    League records updated")
+
     return {
         'season_stats_count': season_stats_count,
         'career_count': career_count,

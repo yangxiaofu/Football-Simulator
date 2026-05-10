@@ -77,6 +77,13 @@ def advance_week(
         # Update standings
         update_all_standings(conn, season_year)
 
+        # Update sentiment drivers every 4 weeks
+        if week_num % 4 == 0:
+            from ..league.owner_sentiment import update_weekly_drivers
+            from ..db.queries import get_all_teams
+            for team in get_all_teams(conn):
+                update_weekly_drivers(conn, team['id'], season_year)
+
         # Heal injuries (decrement weeks remaining)
         healed = heal_injured_players(conn)
 
@@ -118,6 +125,9 @@ def simulate_week_games(
         List of game result dicts from simulate_game
     """
     from ..engine.game_sim import simulate_game
+    from ..league.owner_sentiment import update_wins_delta_after_game
+    from ..transactions.coaching_carousel import check_mid_season_firing
+    from ..utils.constants import MID_SEASON_FIRING_START_WEEK, MID_SEASON_FIRING_END_WEEK
 
     games = get_unplayed_games_for_week(conn, season_year, week_number)
     results = []
@@ -132,6 +142,19 @@ def simulate_week_games(
 
         result = simulate_game(save_path, game['id'], verbose=verbose)
         results.append(result)
+
+        # Post-game sentiment updates
+        home_won = result['home_score'] > result['away_score']
+        with conn:
+            update_wins_delta_after_game(conn, game['home_team_id'], season_year, won=home_won)
+            update_wins_delta_after_game(conn, game['away_team_id'], season_year, won=not home_won)
+
+            # Mid-season firing check (weeks 6-16, only after losses)
+            if MID_SEASON_FIRING_START_WEEK <= week_number <= MID_SEASON_FIRING_END_WEEK:
+                if not home_won:
+                    check_mid_season_firing(conn, game['home_team_id'], season_year, week_number, is_loss=True)
+                else:
+                    check_mid_season_firing(conn, game['away_team_id'], season_year, week_number, is_loss=True)
 
     return results
 

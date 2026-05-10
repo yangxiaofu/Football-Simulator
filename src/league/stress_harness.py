@@ -173,6 +173,13 @@ def run_stress_test(
                         break
                     advance_phase(user_team_id, season_year, conn)
 
+                # Auto-resolve any vacant coaches (player coach in vacancy state)
+                from ..db.queries import get_vacant_coaches
+                from ..transactions.coach_offers import auto_accept_best_offer
+                for coach in get_vacant_coaches(conn):
+                    if coach['is_player']:
+                        auto_accept_best_offer(conn, coach['id'], season_year)
+
             if print_progress:
                 print(" done")
 

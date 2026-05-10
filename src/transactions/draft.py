@@ -484,29 +484,42 @@ def run_ai_pick(
     if not available:
         raise ValueError("No undrafted prospects remaining.")
 
-    # Get GM personality
+    # Get GM personality and phase-aware behavior
     team_row = get_team(conn, team_id)
     gm_personality = team_row['gm_personality'] if team_row else 'analytics'
 
-    # Get personality weights
-    weights = AI_PICK_WEIGHTS_BY_PERSONALITY.get(
-        gm_personality,
-        AI_PICK_WEIGHTS_BY_PERSONALITY['analytics'],
-    )
+    # Phase-aware draft strategy
+    from ..utils.ai_behavior_matrix import get_behavior_signature
+    from ..utils.constants import DRAFT_STRATEGY_WEIGHTS, DRAFT_UPSIDE_NOISE_BOOST
+    if team_row:
+        try:
+            team_phase = team_row['team_phase'] or 'bridge'
+        except (IndexError, KeyError):
+            team_phase = 'bridge'
+    else:
+        team_phase = 'bridge'
+    profile = get_behavior_signature(gm_personality, team_phase)
+    draft_strategy = profile['draft_strategy']
 
-    if gm_personality == 'opportunist' or weights['talent'] is None:
-        # Randomize weights each pick
+    # Use behavior matrix strategy weights instead of personality-only weights
+    strategy_weights = DRAFT_STRATEGY_WEIGHTS.get(draft_strategy, DRAFT_STRATEGY_WEIGHTS['bpa'])
+
+    if gm_personality == 'opportunist':
+        # Randomize weights each pick (personality override)
         talent_w = random.uniform(0.40, 0.80)
         need_w = 1.0 - talent_w
     else:
-        talent_w = weights['talent']
-        need_w = weights['need']
+        talent_w = strategy_weights['talent']
+        need_w = strategy_weights['need']
+
+    # Extra noise for upside strategy (higher ceiling, more variance)
+    extra_noise = DRAFT_UPSIDE_NOISE_BOOST if draft_strategy == 'upside' else 0
 
     # Score each available prospect
     scored = []
     for prospect in available:
         # AI board: true_overall + noise
-        noise = random.randint(-AI_BOARD_NOISE, AI_BOARD_NOISE)
+        noise = random.randint(-AI_BOARD_NOISE - extra_noise, AI_BOARD_NOISE + extra_noise)
         talent_score = prospect['true_overall'] + noise
 
         # Positional need

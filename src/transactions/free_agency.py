@@ -829,7 +829,16 @@ def run_ai_fa_signings(
 
         personality = team['gm_personality']
         traits = GM_PERSONALITY_TRAITS.get(personality, {})
-        aggression = traits.get('fa_aggression', 0.5)
+        base_aggression = traits.get('fa_aggression', 0.5)
+
+        # Phase-aware FA behavior
+        from ..utils.ai_behavior_matrix import get_behavior_signature
+        try:
+            team_phase = team['team_phase'] or 'bridge'
+        except (IndexError, KeyError):
+            team_phase = 'bridge'
+        profile = get_behavior_signature(personality, team_phase)
+        aggression = base_aggression * profile['fa_aggression_mult']
 
         # Low-aggression GMs may skip FA entirely
         if random.random() > aggression:
@@ -840,7 +849,8 @@ def run_ai_fa_signings(
         if not needs:
             continue
 
-        overpay_pct = FA_AI_OVERPAY_BY_PERSONALITY.get(personality, 0.0)
+        overpay_pct = FA_AI_OVERPAY_BY_PERSONALITY.get(personality, 0.0) + profile['overpay_mult']
+        max_offers = max(1, int(FA_AI_MAX_OFFERS * profile['max_fa_offers_mult']))
         offers_made = 0
 
         # Get current free agents
@@ -849,7 +859,7 @@ def run_ai_fa_signings(
             break  # No more FAs available
 
         for need_pos in needs:
-            if offers_made >= FA_AI_MAX_OFFERS:
+            if offers_made >= max_offers:
                 break
 
             # Filter FAs by position
@@ -906,10 +916,17 @@ def run_ai_fa_signings(
             if fair_aav <= 0:
                 continue
 
-            # Calculate offer based on personality
+            # Calculate offer based on personality and phase
             offer_aav = int(fair_aav * (1 + overpay_pct))
+            # Rebuild teams sign shorter deals, win_now sign longer
+            if team_phase == 'rebuild':
+                base_years = MIN_CONTRACT_YEARS
+            elif team_phase in ('win_now', 'contend'):
+                base_years = 4
+            else:
+                base_years = 3
             offer_years = min(
-                max(MIN_CONTRACT_YEARS, 3), MAX_CONTRACT_YEARS,
+                max(MIN_CONTRACT_YEARS, base_years), MAX_CONTRACT_YEARS,
             )
             offer_bonus = int(offer_aav * offer_years * 0.12)
             offer_guaranteed = int(offer_aav * offer_years * 0.40)

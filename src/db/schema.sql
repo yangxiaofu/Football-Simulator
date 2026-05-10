@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS team (
     cap_space           INTEGER NOT NULL,        -- recalculated field; cached for performance
     waiver_priority     INTEGER NOT NULL,        -- 1-32; 1 = highest priority
     fan_sentiment       INTEGER NOT NULL DEFAULT 50,  -- 0-100
+    team_phase          TEXT NOT NULL DEFAULT 'bridge', -- 'rebuild' | 'bridge' | 'contend' | 'win_now' | 'decline'
     FOREIGN KEY (division_id) REFERENCES division(id)
 );
 
@@ -58,7 +59,15 @@ CREATE TABLE IF NOT EXISTS season (
     salary_cap      INTEGER NOT NULL,
     champion_team_id INTEGER,
     is_complete     INTEGER NOT NULL DEFAULT 0,  -- boolean
-    FOREIGN KEY (champion_team_id) REFERENCES team(id)
+    runner_up_team_id INTEGER,
+    championship_home_score INTEGER,
+    championship_away_score INTEGER,
+    championship_mvp_player_id INTEGER,
+    championship_coach_id INTEGER,
+    FOREIGN KEY (champion_team_id) REFERENCES team(id),
+    FOREIGN KEY (runner_up_team_id) REFERENCES team(id),
+    FOREIGN KEY (championship_mvp_player_id) REFERENCES player(id),
+    FOREIGN KEY (championship_coach_id) REFERENCES coach_career(id)
 );
 
 CREATE TABLE IF NOT EXISTS week (
@@ -945,8 +954,141 @@ CREATE TABLE IF NOT EXISTS coach_tenure (
     start_year      INTEGER NOT NULL,
     end_year        INTEGER,
     end_reason      TEXT,
+    starting_condition_multiplier REAL NOT NULL DEFAULT 1.0,  -- Phase 4 Prompt #7
     FOREIGN KEY (coach_id) REFERENCES coach_career(id),
     FOREIGN KEY (team_id) REFERENCES team(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_coach_tenure_coach ON coach_tenure(coach_id, end_year);
+
+-- ====================
+-- 9. OWNER SENTIMENT & JOB OFFERS (Phase 4 Prompt #4)
+-- ====================
+
+-- Owner sentiment tracking (one row per team per season)
+CREATE TABLE IF NOT EXISTS owner_sentiment (
+    id                      INTEGER PRIMARY KEY,
+    team_id                 INTEGER NOT NULL,
+    season_year             INTEGER NOT NULL,
+    sentiment_score         INTEGER NOT NULL DEFAULT 70,
+    preseason_expectation   TEXT,  -- 'rebuild'|'competitive'|'playoff'|'championship'
+    hot_seat_tier           TEXT NOT NULL DEFAULT 'stable',
+
+    -- Driver breakdowns (for inspection/tuning)
+    wins_vs_expectation     INTEGER NOT NULL DEFAULT 0,
+    cap_management_score    INTEGER NOT NULL DEFAULT 0,
+    star_holdout_penalty    INTEGER NOT NULL DEFAULT 0,
+    playoff_bonus           INTEGER NOT NULL DEFAULT 0,
+    championship_bonus      INTEGER NOT NULL DEFAULT 0,
+
+    FOREIGN KEY (team_id) REFERENCES team(id),
+    UNIQUE(team_id, season_year)
+);
+
+CREATE INDEX IF NOT EXISTS idx_owner_sentiment_team ON owner_sentiment(team_id, season_year);
+
+-- Job offers during vacancy (player coach only)
+CREATE TABLE IF NOT EXISTS coach_job_offer (
+    id                  INTEGER PRIMARY KEY,
+    coach_id            INTEGER NOT NULL,
+    team_id             INTEGER NOT NULL,
+    season_year         INTEGER NOT NULL,
+    week_offered        INTEGER NOT NULL,
+    offer_quality_tier  TEXT NOT NULL,  -- 'elite'|'good'|'average'|'struggling'
+    is_accepted         INTEGER NOT NULL DEFAULT 0,
+    is_declined         INTEGER NOT NULL DEFAULT 0,
+
+    FOREIGN KEY (coach_id) REFERENCES coach_career(id),
+    FOREIGN KEY (team_id) REFERENCES team(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_coach_job_offer_coach ON coach_job_offer(coach_id);
+
+-- ====================
+-- 10. COACH LEGACY EXPANSION (Phase 4 Prompt #7)
+-- ====================
+
+-- Per-coach, per-season legacy snapshot
+CREATE TABLE IF NOT EXISTS coach_legacy_score (
+    id                              INTEGER PRIMARY KEY,
+    coach_id                        INTEGER NOT NULL,
+    season_year                     INTEGER NOT NULL,
+    team_id                         INTEGER NOT NULL,
+
+    -- Six base factors (mirror existing legacy.py weights)
+    championships                   INTEGER NOT NULL DEFAULT 0,
+    conference_titles               INTEGER NOT NULL DEFAULT 0,
+    season_win_pct                  REAL NOT NULL DEFAULT 0,
+    stars_developed                 INTEGER NOT NULL DEFAULT 0,
+    cap_efficiency_score            INTEGER NOT NULL DEFAULT 50,
+    media_legacy_score              INTEGER NOT NULL DEFAULT 50,
+
+    -- Phase 4 multipliers
+    era_difficulty_multiplier       REAL NOT NULL DEFAULT 1.0,
+    starting_condition_multiplier   REAL NOT NULL DEFAULT 1.0,
+
+    -- Computed season contribution
+    season_legacy_score             INTEGER NOT NULL DEFAULT 0,
+
+    FOREIGN KEY (coach_id) REFERENCES coach_career(id),
+    FOREIGN KEY (team_id) REFERENCES team(id),
+    UNIQUE(coach_id, season_year)
+);
+
+CREATE INDEX IF NOT EXISTS idx_coach_legacy_coach ON coach_legacy_score(coach_id);
+CREATE INDEX IF NOT EXISTS idx_coach_legacy_season ON coach_legacy_score(season_year);
+
+-- End-of-season narrative beats
+CREATE TABLE IF NOT EXISTS coach_narrative_beat (
+    id              INTEGER PRIMARY KEY,
+    coach_id        INTEGER NOT NULL,
+    season_year     INTEGER NOT NULL,
+    beat_type       TEXT NOT NULL,  -- 'routine' | 'dramatic' | 'dynasty_milestone' | 'hof_eligible'
+    text            TEXT NOT NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (coach_id) REFERENCES coach_career(id),
+    UNIQUE(coach_id, season_year)
+);
+
+CREATE INDEX IF NOT EXISTS idx_coach_narrative_coach ON coach_narrative_beat(coach_id);
+
+-- Cached peer ranking snapshots
+CREATE TABLE IF NOT EXISTS peer_ranking_snapshot (
+    id                  INTEGER PRIMARY KEY,
+    coach_id            INTEGER NOT NULL,
+    season_year         INTEGER NOT NULL,
+    career_legacy_total INTEGER NOT NULL,
+    active_rank         INTEGER NOT NULL,
+    all_time_rank       INTEGER NOT NULL,
+    n_active            INTEGER NOT NULL,
+    n_all_time          INTEGER NOT NULL,
+    FOREIGN KEY (coach_id) REFERENCES coach_career(id),
+    UNIQUE(coach_id, season_year)
+);
+
+CREATE INDEX IF NOT EXISTS idx_peer_ranking_season ON peer_ranking_snapshot(season_year, active_rank);
+
+-- ====================
+-- 11. HISTORICAL RECORDS (Phase 4 Prompt #8)
+-- ====================
+
+-- League-wide records (one row per category × scope)
+CREATE TABLE IF NOT EXISTS league_record (
+    id                  INTEGER PRIMARY KEY,
+    category            TEXT NOT NULL,         -- e.g. 'passing_yards', 'rushing_tds'
+    scope               TEXT NOT NULL,         -- 'single_game' | 'single_season' | 'career'
+    record_value        REAL NOT NULL,         -- REAL for stats like sacks (0.5 increments)
+    holder_player_id    INTEGER,               -- NULL for team/coach records
+    holder_team_id      INTEGER,               -- NULL for player/coach records
+    holder_coach_id     INTEGER,               -- NULL for player/team records
+    holder_name         TEXT NOT NULL,         -- denormalized for historical accuracy
+    season_year         INTEGER,               -- year the record was set
+    week_number         INTEGER,               -- only for single_game scope
+    set_at              TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (holder_player_id) REFERENCES player(id),
+    FOREIGN KEY (holder_team_id) REFERENCES team(id),
+    FOREIGN KEY (holder_coach_id) REFERENCES coach_career(id),
+    UNIQUE(category, scope)
+);
+
+CREATE INDEX IF NOT EXISTS idx_league_record_category ON league_record(category, scope);

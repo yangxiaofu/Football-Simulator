@@ -69,10 +69,51 @@ def start_offseason(
         }
 
     from ..league.development import run_full_development
+    from ..league.team_phase import update_all_team_phases
+    from ..transactions.coaching_carousel import run_coaching_carousel
+    from ..league.owner_sentiment import set_preseason_expectation, finalize_season_sentiment
+    # Phase 4 Prompt #7 imports
+    from ..league.legacy import update_all_coach_legacy_scores, evaluate_dynasty_and_hof
+    from ..league.peer_ranking import update_peer_rankings
+    from ..league.narrative_beats import generate_all_narrative_beats
 
     first_phase = OFFSEASON_PHASE_SEQUENCE[0]
 
     with conn:
+        # Phase classification
+        phase_results = update_all_team_phases(conn, season_year)
+
+        # Initialize sentiment for next season and finalize for season that just ended
+        for team in get_all_teams(conn):
+            tid = team['id']
+            # Initialize sentiment for upcoming season (season_year + 1)
+            from ..league.owner_sentiment import initialize_sentiment
+            initialize_sentiment(conn, tid, season_year + 1)
+            set_preseason_expectation(conn, tid, season_year + 1)
+            # Finalize sentiment for season that just ended
+            finalize_season_sentiment(conn, tid, season_year)
+
+        # PHASE 4 PROMPT #7: Coach legacy expansion
+        # (Must run before coaching carousel, as narrative beats reference sentiment)
+
+        # 1. Update per-coach legacy with multipliers
+        update_all_coach_legacy_scores(conn, season_year)
+
+        # 2. Check dynasty/HOF triggers for all active coaches
+        from ..db.queries import get_all_active_coaches
+        active_coaches = get_all_active_coaches(conn)
+        for coach in active_coaches:
+            evaluate_dynasty_and_hof(conn, coach['id'], season_year)
+
+        # 3. Compute peer rankings
+        update_peer_rankings(conn, season_year)
+
+        # 4. Generate narrative beats
+        generate_all_narrative_beats(conn, season_year)
+
+        # Coaching carousel (now uses sentiment-aware firing)
+        carousel_results = run_coaching_carousel(conn, season_year)
+
         # Run player development and aging for all players
         dev_results = run_full_development(conn, season_year)
 
@@ -95,6 +136,8 @@ def start_offseason(
         'narrative': narrative,
         'development_results': dev_results,
         'legacy_delta': legacy,
+        'phase_results': phase_results,
+        'carousel_results': carousel_results,
     }
 
 

@@ -40,6 +40,10 @@ def get_connection(save_path: str) -> sqlite3.Connection:
     ensure_draft_tables(conn)
     ensure_offseason_state_table(conn)
     ensure_coach_tables(conn)
+    ensure_team_phase_column(conn)
+    ensure_owner_sentiment_tables(conn)
+    ensure_coach_legacy_tables(conn)
+    ensure_league_record_table(conn)
 
     return conn
 
@@ -617,6 +621,235 @@ def ensure_coach_tables(conn: sqlite3.Connection) -> None:
     # Add coach_id column to legacy_score and hall_of_fame for existing saves
     _safe_add_column(conn, 'legacy_score', 'coach_id', 'INTEGER REFERENCES coach_career(id)')
     _safe_add_column(conn, 'hall_of_fame', 'coach_id', 'INTEGER REFERENCES coach_career(id)')
+
+    conn.commit()
+
+
+def ensure_team_phase_column(conn: sqlite3.Connection) -> None:
+    """Add team_phase column to team table if it doesn't exist.
+
+    Safe to call multiple times. Used for migrating existing save files
+    that were created before the AI GM behavior system was added (Phase 4).
+
+    Args:
+        conn: Database connection
+    """
+    _safe_add_column(conn, 'team', 'team_phase', "TEXT NOT NULL DEFAULT 'bridge'")
+    conn.commit()
+
+
+def ensure_owner_sentiment_tables(conn: sqlite3.Connection) -> None:
+    """
+    Create owner_sentiment and coach_job_offer tables if they don't exist.
+
+    Safe to call multiple times. Used for migrating existing save files
+    that were created before the owner sentiment system was added (Phase 4 Prompt #4).
+
+    Args:
+        conn: Database connection
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS owner_sentiment (
+            id                      INTEGER PRIMARY KEY,
+            team_id                 INTEGER NOT NULL,
+            season_year             INTEGER NOT NULL,
+            sentiment_score         INTEGER NOT NULL DEFAULT 70,
+            preseason_expectation   TEXT,
+            hot_seat_tier           TEXT NOT NULL DEFAULT 'stable',
+
+            -- Driver breakdowns
+            wins_vs_expectation     INTEGER NOT NULL DEFAULT 0,
+            cap_management_score    INTEGER NOT NULL DEFAULT 0,
+            star_holdout_penalty    INTEGER NOT NULL DEFAULT 0,
+            playoff_bonus           INTEGER NOT NULL DEFAULT 0,
+            championship_bonus      INTEGER NOT NULL DEFAULT 0,
+
+            FOREIGN KEY (team_id) REFERENCES team(id),
+            UNIQUE(team_id, season_year)
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_owner_sentiment_team
+        ON owner_sentiment(team_id, season_year)
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS coach_job_offer (
+            id                  INTEGER PRIMARY KEY,
+            coach_id            INTEGER NOT NULL,
+            team_id             INTEGER NOT NULL,
+            season_year         INTEGER NOT NULL,
+            week_offered        INTEGER NOT NULL,
+            offer_quality_tier  TEXT NOT NULL,
+            is_accepted         INTEGER NOT NULL DEFAULT 0,
+            is_declined         INTEGER NOT NULL DEFAULT 0,
+
+            FOREIGN KEY (coach_id) REFERENCES coach_career(id),
+            FOREIGN KEY (team_id) REFERENCES team(id)
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_coach_job_offer_coach
+        ON coach_job_offer(coach_id)
+    """)
+    conn.commit()
+
+
+def ensure_coach_legacy_tables(conn: sqlite3.Connection) -> None:
+    """Create coach legacy expansion tables (Phase 4 Prompt #7)."""
+    # Create coach_legacy_score table
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS coach_legacy_score (
+            id                              INTEGER PRIMARY KEY,
+            coach_id                        INTEGER NOT NULL,
+            season_year                     INTEGER NOT NULL,
+            team_id                         INTEGER NOT NULL,
+
+            championships                   INTEGER NOT NULL DEFAULT 0,
+            conference_titles               INTEGER NOT NULL DEFAULT 0,
+            season_win_pct                  REAL NOT NULL DEFAULT 0,
+            stars_developed                 INTEGER NOT NULL DEFAULT 0,
+            cap_efficiency_score            INTEGER NOT NULL DEFAULT 50,
+            media_legacy_score              INTEGER NOT NULL DEFAULT 50,
+
+            era_difficulty_multiplier       REAL NOT NULL DEFAULT 1.0,
+            starting_condition_multiplier   REAL NOT NULL DEFAULT 1.0,
+
+            season_legacy_score             INTEGER NOT NULL DEFAULT 0,
+
+            FOREIGN KEY (coach_id) REFERENCES coach_career(id),
+            FOREIGN KEY (team_id) REFERENCES team(id),
+            UNIQUE(coach_id, season_year)
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_coach_legacy_coach
+        ON coach_legacy_score(coach_id)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_coach_legacy_season
+        ON coach_legacy_score(season_year)
+    """)
+
+    # Create coach_narrative_beat table
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS coach_narrative_beat (
+            id              INTEGER PRIMARY KEY,
+            coach_id        INTEGER NOT NULL,
+            season_year     INTEGER NOT NULL,
+            beat_type       TEXT NOT NULL,
+            text            TEXT NOT NULL,
+            created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (coach_id) REFERENCES coach_career(id),
+            UNIQUE(coach_id, season_year)
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_coach_narrative_coach
+        ON coach_narrative_beat(coach_id)
+    """)
+
+    # Create peer_ranking_snapshot table
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS peer_ranking_snapshot (
+            id                  INTEGER PRIMARY KEY,
+            coach_id            INTEGER NOT NULL,
+            season_year         INTEGER NOT NULL,
+            career_legacy_total INTEGER NOT NULL,
+            active_rank         INTEGER NOT NULL,
+            all_time_rank       INTEGER NOT NULL,
+            n_active            INTEGER NOT NULL,
+            n_all_time          INTEGER NOT NULL,
+            FOREIGN KEY (coach_id) REFERENCES coach_career(id),
+            UNIQUE(coach_id, season_year)
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_peer_ranking_season
+        ON peer_ranking_snapshot(season_year, active_rank)
+    """)
+
+    # Add starting_condition_multiplier to coach_tenure (safe ALTER)
+    try:
+        conn.execute("""
+            ALTER TABLE coach_tenure
+            ADD COLUMN starting_condition_multiplier REAL NOT NULL DEFAULT 1.0
+        """)
+    except sqlite3.OperationalError:
+        # Column already exists
+        pass
+
+    conn.commit()
+
+
+def ensure_league_record_table(conn: sqlite3.Connection) -> None:
+    """Create league_record table and extend season table (Phase 4 Prompt #8)."""
+    # Create league_record table
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS league_record (
+            id                  INTEGER PRIMARY KEY,
+            category            TEXT NOT NULL,
+            scope               TEXT NOT NULL,
+            record_value        REAL NOT NULL,
+            holder_player_id    INTEGER,
+            holder_team_id      INTEGER,
+            holder_coach_id     INTEGER,
+            holder_name         TEXT NOT NULL,
+            season_year         INTEGER,
+            week_number         INTEGER,
+            set_at              TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (holder_player_id) REFERENCES player(id),
+            FOREIGN KEY (holder_team_id) REFERENCES team(id),
+            FOREIGN KEY (holder_coach_id) REFERENCES coach_career(id),
+            UNIQUE(category, scope)
+        )
+    """)
+
+    # Create index
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_league_record_category
+        ON league_record(category, scope)
+    """)
+
+    # Alter season table (5 new columns, safe with DEFAULT/NULL)
+    try:
+        conn.execute("""
+            ALTER TABLE season
+            ADD COLUMN runner_up_team_id INTEGER REFERENCES team(id)
+        """)
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
+    try:
+        conn.execute("""
+            ALTER TABLE season
+            ADD COLUMN championship_home_score INTEGER
+        """)
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        conn.execute("""
+            ALTER TABLE season
+            ADD COLUMN championship_away_score INTEGER
+        """)
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        conn.execute("""
+            ALTER TABLE season
+            ADD COLUMN championship_mvp_player_id INTEGER REFERENCES player(id)
+        """)
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        conn.execute("""
+            ALTER TABLE season
+            ADD COLUMN championship_coach_id INTEGER REFERENCES coach_career(id)
+        """)
+    except sqlite3.OperationalError:
+        pass
 
     conn.commit()
 

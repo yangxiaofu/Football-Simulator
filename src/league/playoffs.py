@@ -304,6 +304,8 @@ def crown_champion(
 
     Returns the champion team_id.
     """
+    from .historical_records import update_champion_history, determine_championship_mvp
+
     sb_winners = _get_round_winners(conn, season_year, 'superbowl')
     if not sb_winners:
         raise RuntimeError("No Super Bowl winner found")
@@ -314,7 +316,7 @@ def crown_champion(
     set_season_champion(conn, season_year, champion_id)
     set_team_playoff_result(conn, champion_id, season_year, 'champion')
 
-    # Set Super Bowl loser
+    # Set Super Bowl loser and capture championship details (Phase 4 Prompt #8)
     sb_week = PLAYOFF_WEEK_NUMBERS['superbowl']
     sb_games = get_all_games_for_week(conn, season_year, sb_week)
     for g in sb_games:
@@ -322,6 +324,30 @@ def crown_champion(
             continue
         loser_id = g['away_team_id'] if g['home_team_id'] == champion_id else g['home_team_id']
         set_team_playoff_result(conn, loser_id, season_year, 'superbowl_loss')
+
+        # Capture championship details
+        sb_game_id = g['id']
+        home_score = g['home_score']
+        away_score = g['away_score']
+        mvp_player_id = determine_championship_mvp(conn, sb_game_id)
+
+        # Get coach of champion team
+        coach_row = conn.execute("""
+            SELECT id FROM coach_career
+            WHERE current_team_id = ? AND is_active = 1
+        """, (champion_id,)).fetchone()
+        coach_id = coach_row['id'] if coach_row else None
+
+        # Update championship history
+        update_champion_history(
+            conn, season_year,
+            champion_team_id=champion_id,
+            runner_up_team_id=loser_id,
+            home_score=home_score,
+            away_score=away_score,
+            mvp_player_id=mvp_player_id,
+            coach_id=coach_id,
+        )
 
     return champion_id
 

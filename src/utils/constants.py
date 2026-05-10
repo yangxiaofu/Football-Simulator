@@ -1742,6 +1742,141 @@ GM_PERSONALITIES_TUPLE = ('draft_purist', 'win_now', 'analytics', 'loyalty', 'op
 
 
 # ==============================
+# AI GM BEHAVIOR (Phase 4 Prompt #3)
+# ==============================
+
+# Team phases
+TEAM_PHASES = ('rebuild', 'bridge', 'contend', 'win_now', 'decline')
+TEAM_PHASE_DEFAULT = 'bridge'
+
+# Phase classifier thresholds
+PHASE_STAR_THRESHOLD = 90              # true_overall >= 90 = "star"
+PHASE_MIN_STARS_CONTEND = 3
+PHASE_MIN_STARS_BRIDGE = 2             # <2 = rebuild
+PHASE_ROSTER_YOUNG_AGE_MAX = 24.5
+PHASE_ROSTER_OLD_AGE_MIN = 28.5
+PHASE_CAP_HEALTHY_THRESHOLD = 30_000_000
+PHASE_CAP_STRESSED_THRESHOLD = 5_000_000
+PHASE_WINNING_RECORD_PCT = 0.500
+PHASE_STRONG_RECORD_PCT = 0.588        # ~10+ wins
+PHASE_LOOKBACK_SEASONS = 2
+PHASE_CONSECUTIVE_LOSING_DECLINE = 2
+
+# Personality transition speed modifiers
+PHASE_TRANSITION_SPEED = {
+    'draft_purist': {'to_rebuild': 1.0, 'to_win_now': 0.3},
+    'win_now':      {'to_rebuild': 0.3, 'to_win_now': 1.0},
+    'analytics':    {'to_rebuild': 0.7, 'to_win_now': 0.6},
+    'loyalty':      {'to_rebuild': 0.5, 'to_win_now': 0.5},
+    'opportunist':  {'to_rebuild': 0.6, 'to_win_now': 0.8},
+}
+
+# Draft strategy weights
+DRAFT_STRATEGY_WEIGHTS = {
+    'bpa':    {'talent': 0.75, 'need': 0.25},
+    'need':   {'talent': 0.35, 'need': 0.65},
+    'upside': {'talent': 0.70, 'need': 0.30},
+}
+DRAFT_UPSIDE_NOISE_BOOST = 5
+
+# AI coaching carousel
+CAROUSEL_CONSECUTIVE_LOSING_THRESHOLD = 2
+CAROUSEL_NO_PLAYOFFS_CONTENDER_THRESHOLD = 3
+CAROUSEL_FIRE_PROBABILITY_LOSING = 0.80
+CAROUSEL_FIRE_PROBABILITY_NO_PLAYOFFS = 0.60
+CAROUSEL_MIN_TENURE_SEASONS = 2
+CAROUSEL_HIRE_WEIGHTS_BY_PHASE = {
+    'rebuild':  {'draft_purist': 0.35, 'analytics': 0.30, 'loyalty': 0.15, 'win_now': 0.05, 'opportunist': 0.15},
+    'bridge':   {'draft_purist': 0.20, 'analytics': 0.30, 'loyalty': 0.20, 'win_now': 0.10, 'opportunist': 0.20},
+    'contend':  {'draft_purist': 0.10, 'analytics': 0.25, 'loyalty': 0.15, 'win_now': 0.30, 'opportunist': 0.20},
+    'win_now':  {'draft_purist': 0.05, 'analytics': 0.15, 'loyalty': 0.10, 'win_now': 0.45, 'opportunist': 0.25},
+    'decline':  {'draft_purist': 0.30, 'analytics': 0.30, 'loyalty': 0.15, 'win_now': 0.05, 'opportunist': 0.20},
+}
+
+
+# ==============================
+# OWNER SENTIMENT (Phase 4 Prompt #4)
+# ==============================
+
+# Sentiment range
+SENTIMENT_MIN = 0
+SENTIMENT_MAX = 100
+SENTIMENT_DEFAULT = 70
+
+# Preseason expectations
+EXPECTATION_TIERS = ('rebuild', 'competitive', 'playoff', 'championship')
+EXPECTATION_WIN_TARGETS = {
+    'rebuild': 4,
+    'competitive': 8,
+    'playoff': 10,
+    'championship': 12,
+}
+
+# Sentiment driver weights
+SENTIMENT_WEIGHT_PER_WIN_ABOVE = 5
+SENTIMENT_WEIGHT_PER_WIN_BELOW = -5
+SENTIMENT_CAP_HEALTHY_THRESHOLD = 30_000_000
+SENTIMENT_CAP_HEALTHY_BONUS = 20
+SENTIMENT_CAP_OVER_PENALTY = -20
+SENTIMENT_STAR_HOLDOUT_PENALTY = -10
+SENTIMENT_PLAYOFF_BONUS = 15
+SENTIMENT_CHAMPIONSHIP_BONUS = 25
+
+# Hot seat tiers (inclusive ranges)
+HOT_SEAT_TIERS = {
+    'untouchable': (70, 100),
+    'stable': (40, 69),
+    'warm': (20, 39),
+    'hot': (10, 19),
+    'termination': (0, 9),
+}
+
+# Firing probabilities by tier
+FIRING_PROB_MID_SEASON = {
+    'untouchable': 0.0,
+    'stable': 0.0,
+    'warm': 0.0,
+    'hot': 0.25,
+    'termination': 0.75,
+}
+
+FIRING_PROB_END_SEASON = {
+    'untouchable': 0.0,
+    'stable': 0.05,
+    'warm': 0.30,
+    'hot': 0.70,
+    'termination': 0.95,
+}
+
+MID_SEASON_FIRING_START_WEEK = 6
+MID_SEASON_FIRING_END_WEEK = 16
+
+# ==============================
+# COACH JOB OFFERS (Phase 4 Prompt #4)
+# ==============================
+
+VACANCY_OFFER_WINDOW_WEEKS = 2
+VACANCY_MIN_OFFERS = 1
+VACANCY_MAX_OFFERS = 3
+
+OFFER_QUALITY_TIERS = ('elite', 'good', 'average', 'struggling')
+OFFER_QUALITY_THRESHOLDS = {
+    'elite': {'cap_min': 20_000_000, 'wpct_min': 0.600},
+    'good': {'cap_min': 10_000_000, 'wpct_min': 0.470},
+    'average': {'cap_min': 0, 'wpct_min': 0.0},
+}
+
+OFFER_COUNT_BY_LEGACY_QUARTILE = {
+    4: 3,  # top 25%
+    3: 2,
+    2: 2,
+    1: 1,  # bottom 25%
+}
+
+MUTUAL_PARTING_TIER_BOOST = True
+
+
+# ==============================
 # STRESS HARNESS (Phase 4)
 # ==============================
 STRESS_TEST_DEFAULT_SEASONS = 3
@@ -1758,3 +1893,89 @@ HEALTH_CAP_BUCKETS = [
     ('tight', 0, 30_000_000),
     ('over', float('-inf'), 0),
 ]
+
+
+# ==============================
+# LEGACY EXPANSION (Phase 4 Prompt #7)
+# ==============================
+
+# Era difficulty
+ERA_DIFFICULTY_BASELINE_VARIANCE = 0.16        # NFL typical W% stdev
+ERA_DIFFICULTY_VARIANCE_RANGE = 0.05           # ±0.05 → ±0.15 multiplier
+ERA_DIFFICULTY_MIN = 0.85
+ERA_DIFFICULTY_MAX = 1.15
+ERA_DIFFICULTY_SMOOTHING_WINDOW = 3            # 3-season avg
+
+# Starting condition (locked at hire)
+STARTING_CONDITION_BUCKETS = (
+    (0.300, 1.20),    # Inherited disaster
+    (0.450, 1.10),
+    (0.550, 1.00),    # Baseline
+    (0.700, 0.95),
+    (1.001, 0.90),    # Inherited contender
+)
+
+# Tenure stability bonus
+TENURE_STABILITY_THRESHOLD_YEARS = 5
+TENURE_STABILITY_PER_YEAR = 5
+TENURE_STABILITY_CAP = 25
+
+# Dynasty / HOF triggers (re-exported here for narrative system)
+# Note: HOF_LEGACY_THRESHOLD defined earlier in LEGACY constants section
+
+# Narrative triggers
+NARRATIVE_DRAMATIC_TRIGGERS = (
+    'championship_won',
+    'dynasty_flag_activated',
+    'hof_eligible_first_time',
+    'narrow_firing_escape',
+    'star_player_developed',
+    'first_playoff_appearance',
+    'first_division_title',
+)
+NARRATIVE_TEMPLATE_COUNT_PER_TRIGGER = 4
+
+# ======================
+# HISTORICAL RECORDS (Phase 4 Prompt #8)
+# ======================
+
+# === League record categories ===
+# Verified against schema.sql (box_score/player_season_stats/player_career_stats)
+LEAGUE_RECORD_CATEGORIES = {
+    # Player records — passing
+    'passing_yards':    ('Passing yards',    'pass_yards'),
+    'passing_tds':      ('Passing TDs',      'pass_tds'),
+    'completions':      ('Completions',      'completions'),
+    'pass_attempts':    ('Pass attempts',    'pass_attempts'),
+
+    # Player records — rushing
+    'rushing_yards':    ('Rushing yards',    'rush_yards'),
+    'rushing_tds':      ('Rushing TDs',      'rush_tds'),
+    'rush_attempts':    ('Rush attempts',    'carries'),  # NOTE: column is 'carries'
+
+    # Player records — receiving
+    'receiving_yards':  ('Receiving yards',  'rec_yards'),
+    'receptions':       ('Receptions',       'receptions'),
+    'receiving_tds':    ('Receiving TDs',    'rec_tds'),
+
+    # Player records — defense
+    'sacks':            ('Sacks',            'sacks'),  # REAL type
+    'interceptions':    ('Interceptions',    'interceptions'),
+    'tackles':          ('Tackles',          'tackles'),
+
+    # Player records — kicking
+    'field_goals':      ('Field goals made', 'fg_made'),
+    'fg_long':          ('Longest FG',       'fg_long'),
+}
+
+LEAGUE_RECORD_SCOPES = ('single_game', 'single_season', 'career')
+
+# === Team records ===
+TEAM_RECORD_CATEGORIES = {
+    'season_wins':        ('Most wins, season',     'wins'),
+    'season_points_for':  ('Most points scored',    'points_for'),
+}
+
+# === Display config ===
+CHAMPION_HISTORY_DEFAULT_LIMIT = 25
+ALL_TIME_LEADERS_DEFAULT_TOP_N = 10

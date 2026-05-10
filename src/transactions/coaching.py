@@ -107,6 +107,18 @@ def assign_coach_to_team(
                 (coach_id, team_id, season_year)
             )
 
+            # Phase 4 Prompt #7: Set starting condition multiplier
+            from ..league.legacy import lookup_starting_condition_multiplier
+            starting_mult = lookup_starting_condition_multiplier(
+                conn, coach_id, team_id, season_year
+            )
+            conn.execute(
+                """UPDATE coach_tenure
+                   SET starting_condition_multiplier = ?
+                   WHERE coach_id = ? AND end_year IS NULL""",
+                (starting_mult, coach_id)
+            )
+
             # Step 4: Sync team.gm_personality with coach archetype (Invariant #12)
             conn.execute(
                 "UPDATE team SET gm_personality = ? WHERE id = ?",

@@ -292,7 +292,7 @@ def propose_trade(
     gm_personality = receiving_team['gm_personality'] if receiving_team else 'analytics'
     verdict = _apply_gm_personality(
         verdict, gm_personality, offered_assets, requested_assets,
-        evaluation, season_year, conn,
+        evaluation, season_year, conn, team_id=receiving_team_id,
     )
 
     # --- Build Response ---
@@ -468,8 +468,17 @@ def receive_trade_offers(
         gm = ai_team['gm_personality']
         traits = GM_PERSONALITY_TRAITS.get(gm, GM_PERSONALITY_TRAITS['analytics'])
 
+        # Phase-aware trade willingness
+        from ..utils.ai_behavior_matrix import get_behavior_signature
+        try:
+            ai_phase = ai_team['team_phase'] or 'bridge'
+        except (IndexError, KeyError):
+            ai_phase = 'bridge'
+        ai_profile = get_behavior_signature(gm, ai_phase)
+        effective_willingness = traits['trade_willingness'] * ai_profile['trade_willingness_mult']
+
         # GM willingness check
-        if random.random() > traits['trade_willingness']:
+        if random.random() > effective_willingness:
             continue
 
         # Find high-need positions for this AI team
@@ -686,19 +695,43 @@ def _apply_gm_personality(
     evaluation: dict,
     season_year: int,
     conn: sqlite3.Connection,
+    team_id: int = None,
 ) -> str:
-    """Apply GM personality filter to modify the base verdict."""
+    """Apply GM personality filter to modify the base verdict.
+
+    Uses the behavior matrix to modulate decisions based on team phase.
+    """
+    # Lazy import to avoid circular dependency
+    from ..utils.ai_behavior_matrix import get_behavior_signature
+
+    # Look up phase-aware behavior profile
+    phase = 'bridge'
+    if team_id is not None:
+        team_row = get_team(conn, team_id)
+        if team_row:
+            try:
+                phase = team_row['team_phase'] or 'bridge'
+            except (IndexError, KeyError):
+                phase = 'bridge'
+    profile = get_behavior_signature(gm_personality, phase)
+
+    trade_mult = profile['trade_willingness_mult']
+    trade_vets = profile['trade_vets_for_picks']
+
     if gm_personality == 'opportunist':
-        if random.random() < TRADE_OPPORTUNIST_IRRATIONAL_RATE:
+        # Scale irrational acceptance by phase multiplier
+        effective_rate = TRADE_OPPORTUNIST_IRRATIONAL_RATE * trade_mult
+        if random.random() < effective_rate:
             return "accept"
 
     if gm_personality == 'draft_purist':
-        # Rejects trades that include their 1st-round pick
-        for pick in requested_assets.get('picks', []):
-            if pick.get('round') == 1:
-                if base_verdict == "accept":
-                    return "counter"
-                return "decline"
+        # In rebuild/decline with trade_vets_for_picks, relax 1st-round rejection
+        if not trade_vets:
+            for pick in requested_assets.get('picks', []):
+                if pick.get('round') == 1:
+                    if base_verdict == "accept":
+                        return "counter"
+                    return "decline"
         # Bumps toward accept if receiving draft picks
         if offered_assets.get('picks') and base_verdict == "counter":
             return "accept"
@@ -711,15 +744,16 @@ def _apply_gm_personality(
             if info and info['true_overall'] >= TRADE_VETERAN_OVERALL_THRESHOLD:
                 has_veteran_incoming = True
                 break
+        # Phase multiplier boosts veteran acceptance
         if has_veteran_incoming and base_verdict == "counter":
-            return "accept"
+            if random.random() < trade_mult:
+                return "accept"
 
     if gm_personality == 'loyalty':
         # Reluctant to trade own players
         if requested_assets.get('players'):
             if base_verdict == "accept":
                 # Apply loyalty penalty: require higher value
-                gap_pct = (evaluation['offered_value'] - evaluation['adjusted_threshold'])
                 threshold_with_penalty = evaluation['adjusted_threshold'] * (1 + TRADE_LOYALTY_PENALTY_PERCENT)
                 if evaluation['offered_value'] < threshold_with_penalty:
                     return "counter"
