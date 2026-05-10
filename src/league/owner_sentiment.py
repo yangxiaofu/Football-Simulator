@@ -197,6 +197,7 @@ def finalize_season_sentiment(
     total += sentiment_row['wins_vs_expectation']
     total += sentiment_row['cap_management_score']
     total += sentiment_row['star_holdout_penalty']
+    total += sentiment_row['presser_delta'] if 'presser_delta' in sentiment_row.keys() else 0
     total += playoff_bonus
     total += championship_bonus
 

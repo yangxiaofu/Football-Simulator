@@ -1877,6 +1877,33 @@ MUTUAL_PARTING_TIER_BOOST = True
 
 
 # ==============================
+# TIER 1 PRESS CONFERENCE (Phase 4 Prompt #5)
+# ==============================
+
+PRESS_AUTOPILOT_VALID_CHOICES = ('deflect', 'accountable', 'confrontational')
+PRESS_AUTOPILOT_HARNESS_FALLBACK = 'accountable'  # stress harness default
+
+# Effect magnitudes (small per §5.3)
+PRESS_EFFECTS = {
+    'deflect': {
+        'owner': -1, 'fan': -1, 'locker_room': +1,
+    },
+    'accountable': {
+        'owner': +1, 'fan': +1, 'locker_room': 0,
+    },
+    'confrontational': {
+        'owner': -2, 'fan': +2, 'locker_room': -1,
+    },
+}
+
+# Context detection
+PRESS_BLOWOUT_MARGIN = 14
+PRESS_LOSING_STREAK_THRESHOLD = 3
+PRESS_WINNING_STREAK_THRESHOLD = 3
+PRESS_LOCKER_ROOM_TOP_N_PLAYERS = 10  # MVP simplification
+
+
+# ==============================
 # STRESS HARNESS (Phase 4)
 # ==============================
 STRESS_TEST_DEFAULT_SEASONS = 3

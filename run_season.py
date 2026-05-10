@@ -94,6 +94,65 @@ def cmd_advance_week(conn, save_path):
     if result['healed_count'] > 0:
         print(f"  {result['healed_count']} player(s) recovered from injury")
 
+    # Weekly press conference (regular season only)
+    if week_num <= REGULAR_SEASON_WEEKS:
+        from src.transactions.press_conference import (
+            generate_weekly_press_event,
+            resolve_press_event,
+            set_autopilot_default
+        )
+
+        player_coach = conn.execute("""
+            SELECT id, current_team_id FROM coach_career
+            WHERE is_player = 1 AND is_active = 1
+        """).fetchone()
+
+        if player_coach and player_coach['current_team_id']:
+            event = generate_weekly_press_event(
+                conn, season_year, week_num,
+                player_coach['current_team_id'], player_coach['id'],
+                headless=False
+            )
+
+            if not event['resolved']:
+                # === INTERACTIVE PROMPT ===
+                print("\n" + "=" * 70)
+                print(f"PRESS CONFERENCE — Week {week_num}")
+                print("=" * 70)
+                print(f"Reporter: \"{event['question']}\"")
+                print()
+                choices_list = list(event['responses'].items())
+                for i, (choice_key, text) in enumerate(choices_list, 1):
+                    print(f"  {i}. [{choice_key.upper():<15}] \"{text}\"")
+                print("\nEnter 1-3, or prefix with 'a' (e.g., 'a2') to set autopilot default.\n")
+
+                raw = input("Choice: ").strip().lower()
+                set_default = raw.startswith('a')
+                if set_default:
+                    raw = raw[1:].strip()
+
+                try:
+                    idx = int(raw) - 1
+                    choice = choices_list[idx][0]
+                except (ValueError, IndexError):
+                    print("Invalid input — defaulting to 'accountable'.")
+                    choice = 'accountable'
+
+                with conn:
+                    result = resolve_press_event(conn, event['press_event_id'], choice)
+
+                if set_default:
+                    with conn:
+                        set_autopilot_default(conn, player_coach['id'], choice)
+                    print(f"\nAutopilot set to '{choice}'. Future pressers auto-resolve.")
+
+                print(f"  → Owner: {result['delta_owner']:+d}, Fan: {result['delta_fan']:+d}, "
+                      f"Locker: {result['delta_locker_room']:+d}")
+            else:
+                print(f"\n[Autopilot] Press: \"{event['responses'][event['selected_response']]}\" ({event['selected_response']})")
+                print(f"  → Owner: {event['delta_owner']:+d}, Fan: {event['delta_fan']:+d}, "
+                      f"Locker: {event['delta_locker_room']:+d}")
+
     # Check if regular season is now complete
     new_league = get_league_state(conn)
     if new_league['current_week'] > REGULAR_SEASON_WEEKS:

@@ -83,7 +83,8 @@ Save format: One `.db` file per franchise (SQLite database)
 │   │   ├── trades.py            ← trade value, evaluation, GM personality, AI offers, execution
 │   │   ├── draft.py             ← draft loop, pick selection, AI picks, rookie contracts
 │   │   ├── coaching.py          ← coach assignment, tenure tracking, personality sync (Phase 4)
-│   │   └── coaching_carousel.py ← AI coach fire/hire based on performance (Phase 4)
+│   │   ├── coaching_carousel.py ← AI coach fire/hire based on performance (Phase 4)
+│   │   └── press_conference.py  ← Tier 1 weekly press conferences, autopilot (Phase 4 Prompt #5)
 │   ├── scouting/          ← draft class generation, scouting reports, draft board
 │   │   ├── prospects.py         ← draft class generation, prospect attributes, combine
 │   │   ├── scouts.py            ← scout assignment, accuracy tiers, flag detection, UI-safe views
@@ -95,7 +96,8 @@ Save format: One `.db` file per franchise (SQLite database)
 │   │   └── roster_display.py    ← roster with contracts
 │   └── utils/             ← shared helpers, constants, probability functions
 │       ├── constants.py         ← all tuning constants, thresholds, position lists
-│       └── ai_behavior_matrix.py ← 5x5 personality×phase behavior grid (Phase 4)
+│       ├── ai_behavior_matrix.py ← 5x5 personality×phase behavior grid (Phase 4)
+│       └── press_templates.py   ← 30 press conference templates across 8 contexts (Phase 4 Prompt #5)
 ├── saves/                 ← franchise .db files (gitignored)
 └── assets/                ← future UI assets (logos, fonts)
 ```
@@ -259,7 +261,16 @@ Goal: Coach identity as a first-class entity, portable careers, media/pressure s
 - [x] Verification passing: `python verify_phase4_p3.py` exits 0
 - [x] 3-season stress test passing: 12/12 invariants, 10 coaching changes, 3 distinct phases
 - [x] Historical records module (record book, leaderboards, champion history, CLI viewer)
-- [ ] Media pressure and hot seat system
+- [x] Tier 1 weekly press conference system (Phase 4 Prompt #5)
+- [x] Press conference constants added to `src/utils/constants.py` (autopilot choices, effects, context detection)
+- [x] Press templates library (`src/utils/press_templates.py` — 30 templates across 8 contexts)
+- [x] Press event schema (`press_event` table + `presser_delta` column on `owner_sentiment`)
+- [x] Migration helper (`ensure_press_tables()` in `connection.py`)
+- [x] Press conference module (`src/transactions/press_conference.py` — context detection, generation, resolution, autopilot)
+- [x] CLI integration (`run_season.py` — interactive prompt after each regular season game)
+- [x] Stress harness integration (`src/league/stress_harness.py` — headless auto-resolve)
+- [x] Verification passing: `python verify_phase4_p5.py` exits 0
+- [ ] Tier 2 dramatic press conferences (Phase 4 Prompt #6)
 - [ ] Legacy score integration with coach identity
 
 ---

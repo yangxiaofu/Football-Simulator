@@ -103,6 +103,20 @@ def run_stress_test(
                     break
                 advance_week(conn, db_path)
 
+                # Generate press conference for player coach (headless auto-resolve)
+                from src.transactions.press_conference import generate_weekly_press_event
+                player_coach_row = conn.execute("""
+                    SELECT id, current_team_id FROM coach_career
+                    WHERE is_player = 1 AND is_active = 1
+                """).fetchone()
+
+                if player_coach_row and player_coach_row['current_team_id']:
+                    generate_weekly_press_event(
+                        conn, season_year, wk + 1,
+                        player_coach_row['current_team_id'], player_coach_row['id'],
+                        headless=True
+                    )
+
             if print_progress:
                 print(" done")
 

@@ -941,6 +941,7 @@ CREATE TABLE IF NOT EXISTS coach_career (
     current_team_id       INTEGER,
     is_player             INTEGER NOT NULL DEFAULT 0,
     is_active             INTEGER NOT NULL DEFAULT 1,
+    press_autopilot_default TEXT,  -- NULL = prompt every week, else 'deflect'|'accountable'|'confrontational'
     FOREIGN KEY (current_team_id) REFERENCES team(id)
 );
 
@@ -980,6 +981,7 @@ CREATE TABLE IF NOT EXISTS owner_sentiment (
     star_holdout_penalty    INTEGER NOT NULL DEFAULT 0,
     playoff_bonus           INTEGER NOT NULL DEFAULT 0,
     championship_bonus      INTEGER NOT NULL DEFAULT 0,
+    presser_delta           INTEGER NOT NULL DEFAULT 0,
 
     FOREIGN KEY (team_id) REFERENCES team(id),
     UNIQUE(team_id, season_year)
@@ -1051,6 +1053,33 @@ CREATE TABLE IF NOT EXISTS coach_narrative_beat (
 );
 
 CREATE INDEX IF NOT EXISTS idx_coach_narrative_coach ON coach_narrative_beat(coach_id);
+
+-- ====================
+-- 10. TIER 1 PRESS CONFERENCE (Phase 4 Prompt #5)
+-- ====================
+
+-- Weekly press conference events (one per team per week during regular season)
+CREATE TABLE IF NOT EXISTS press_event (
+    id                      INTEGER PRIMARY KEY,
+    season_year             INTEGER NOT NULL,
+    week_number             INTEGER NOT NULL,
+    team_id                 INTEGER NOT NULL,
+    coach_id                INTEGER NOT NULL,
+    context_type            TEXT NOT NULL,
+    question_template_id    TEXT NOT NULL,
+    selected_response       TEXT,                    -- 'deflect' | 'accountable' | 'confrontational'
+    autopilot_used          INTEGER NOT NULL DEFAULT 0,
+    delta_owner             INTEGER NOT NULL DEFAULT 0,
+    delta_fan               INTEGER NOT NULL DEFAULT 0,
+    delta_locker_room       INTEGER NOT NULL DEFAULT 0,
+    resolved_at             TEXT,
+    created_at              TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (team_id) REFERENCES team(id),
+    FOREIGN KEY (coach_id) REFERENCES coach_career(id),
+    UNIQUE(season_year, week_number, team_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_press_event_team ON press_event(team_id, season_year);
 
 -- Cached peer ranking snapshots
 CREATE TABLE IF NOT EXISTS peer_ranking_snapshot (

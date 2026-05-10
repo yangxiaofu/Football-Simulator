@@ -171,3 +171,111 @@ All tests pass.
 ### Conclusion
 
 All blocking issues for Phase 4 prompt #3 (AI GM behavior) are now resolved. The multi-season loop is stable with all non-deferred invariants passing.
+
+---
+
+## Update — Prompt #5 Tier 1 Press Conference (2026-05-10)
+
+### Implementation Summary
+
+Added weekly press conference system for player coach during regular season (weeks 1-17). Generates one event per week with context-aware questions and three response choices affecting owner sentiment, fan sentiment, and locker room satisfaction.
+
+### Test Configuration
+
+| Parameter | Value |
+|-----------|-------|
+| DB | `saves/phase4_v5.db` |
+| Starting season | 2024 |
+| Seasons | 3 |
+| Duration | ~21s |
+| Crashed | No |
+
+### Press Event Statistics
+
+- **Total events**: 51 (3 seasons × 17 weeks)
+- **All resolved**: Yes (0 unresolved)
+- **Autopilot used**: Yes (harness auto-resolves with 'accountable' fallback)
+
+### Context Distribution
+
+| Context Type | Count | Percentage |
+|--------------|-------|------------|
+| routine | 12 | 23.5% |
+| winning_streak | 10 | 19.6% |
+| post_blowout_win | 10 | 19.6% |
+| post_win | 7 | 13.7% |
+| post_loss | 5 | 9.8% |
+| post_blowout_loss | 5 | 9.8% |
+| post_division_loss | 2 | 3.9% |
+
+**Observation**: All 7 context types used (losing_streak missing from this run due to player team having strong performance). Context detection working correctly.
+
+### Effect Verification
+
+All press events have correct delta values matching `PRESS_EFFECTS` constants:
+- **deflect**: owner -1, fan -1, locker_room +1
+- **accountable**: owner +1, fan +1, locker_room 0
+- **confrontational**: owner -2, fan +2, locker_room -1
+
+### Sentiment Movement
+
+- **Player team fan sentiment**: Started at 50 (default), ended at 100 (max)
+- **Owner sentiment**: presser_delta column correctly accumulates weekly deltas
+- **Locker room**: Top-10 players by true_overall receive satisfaction adjustments
+
+### Interactive Testing
+
+Manual test with `saves/interactive.db`:
+1. Week 1: Choice prompt displayed correctly
+2. Week 2: Autopilot set with 'a1' prefix worked
+3. Week 3+: Auto-resolved with autopilot default
+4. Effect deltas displayed after each press event
+
+### Verification Script
+
+`verify_phase4_p5.py` checks:
+1. ✓ Schema (press_event table, coach_career.press_autopilot_default)
+2. ✓ Press events generated (~51 for 3 seasons)
+3. ✓ All events resolved
+4. ✓ Effect deltas match constants
+5. ✓ Autopilot setter/clearer works
+6. ✓ Context diversity (7-8 types used)
+
+All checks pass.
+
+### Invariant Results
+
+| Season | Result |
+|--------|--------|
+| 2024 | 12/12 PASS |
+| 2025 | 12/12 PASS |
+| 2026 | 12/12 PASS |
+
+No regression from prompt #5 implementation.
+
+### Integration Points
+
+- **CLI (`run_season.py`)**: Press prompt appears after each regular season week
+- **Stress harness (`stress_harness.py`)**: Auto-resolves with headless=True
+- **Owner sentiment (`owner_sentiment.py`)**: presser_delta included in season total
+- **Schema migration (`connection.py`)**: ensure_press_tables() adds tables/columns
+
+### Files Added
+
+- `src/transactions/press_conference.py` (360 lines)
+- `src/utils/press_templates.py` (267 lines)
+- `verify_phase4_p5.py` (243 lines)
+
+### Files Modified
+
+- `src/db/schema.sql` (+28 lines: press_event table, presser_delta column)
+- `src/db/connection.py` (+48 lines: ensure_press_tables migration)
+- `src/utils/constants.py` (+26 lines: press constants)
+- `run_season.py` (+58 lines: interactive press prompt)
+- `src/league/stress_harness.py` (+13 lines: headless press generation)
+- `src/league/owner_sentiment.py` (+1 line: include presser_delta in total)
+- `CLAUDE.md` (+12 lines: checklist + file structure)
+
+### Conclusion
+
+Tier 1 press conference system fully functional. Weekly cadence verified across 3 seasons. Autopilot default allows passive play (harness auto-resolves). Interactive prompt tested and working. Small sentiment effects accumulate correctly. Ready for Tier 2 dramatic events (Prompt #6).

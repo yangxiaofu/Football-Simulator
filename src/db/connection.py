@@ -44,6 +44,7 @@ def get_connection(save_path: str) -> sqlite3.Connection:
     ensure_owner_sentiment_tables(conn)
     ensure_coach_legacy_tables(conn)
     ensure_league_record_table(conn)
+    ensure_press_tables(conn)
 
     return conn
 
@@ -691,6 +692,16 @@ def ensure_owner_sentiment_tables(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_coach_job_offer_coach
         ON coach_job_offer(coach_id)
     """)
+
+    # Add presser_delta column to owner_sentiment (Phase 4 Prompt #5)
+    try:
+        conn.execute("""
+            ALTER TABLE owner_sentiment
+            ADD COLUMN presser_delta INTEGER NOT NULL DEFAULT 0
+        """)
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
     conn.commit()
 
 
@@ -850,6 +861,55 @@ def ensure_league_record_table(conn: sqlite3.Connection) -> None:
         """)
     except sqlite3.OperationalError:
         pass
+
+    conn.commit()
+
+
+def ensure_press_tables(conn: sqlite3.Connection) -> None:
+    """
+    Create press_event table and add press_autopilot_default column to coach_career.
+
+    Safe to call multiple times. Used for migrating existing save files
+    that were created before the Tier 1 press conference system was added (Phase 4 Prompt #5).
+
+    Args:
+        conn: Database connection
+    """
+    # Create press_event table
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS press_event (
+            id                      INTEGER PRIMARY KEY,
+            season_year             INTEGER NOT NULL,
+            week_number             INTEGER NOT NULL,
+            team_id                 INTEGER NOT NULL,
+            coach_id                INTEGER NOT NULL,
+            context_type            TEXT NOT NULL,
+            question_template_id    TEXT NOT NULL,
+            selected_response       TEXT,
+            autopilot_used          INTEGER NOT NULL DEFAULT 0,
+            delta_owner             INTEGER NOT NULL DEFAULT 0,
+            delta_fan               INTEGER NOT NULL DEFAULT 0,
+            delta_locker_room       INTEGER NOT NULL DEFAULT 0,
+            resolved_at             TEXT,
+            created_at              TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (team_id) REFERENCES team(id),
+            FOREIGN KEY (coach_id) REFERENCES coach_career(id),
+            UNIQUE(season_year, week_number, team_id)
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_press_event_team
+        ON press_event(team_id, season_year)
+    """)
+
+    # Add press_autopilot_default column to coach_career
+    try:
+        conn.execute("""
+            ALTER TABLE coach_career
+            ADD COLUMN press_autopilot_default TEXT
+        """)
+    except sqlite3.OperationalError:
+        pass  # Column already exists
 
     conn.commit()
 
