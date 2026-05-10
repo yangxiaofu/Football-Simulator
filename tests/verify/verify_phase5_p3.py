@@ -94,13 +94,17 @@ def check_phase4_regression(save_path):
         print(f"  stderr tail: {result.stderr[-1000:]}")
         return False
 
-    # Check for "12/12 invariants pass" in output
-    if "12/12" not in result.stdout:
-        print(f"  ✗ Expected 12/12 invariants pass")
-        print(f"  stdout tail: {result.stdout[-500:]}")
+    # Check for invariants passing (actual format: "Invariants: 12 passed, 0 failed")
+    # Must have "12 passed" and "0 failed"
+    if "12 passed" not in result.stdout or "0 failed" not in result.stdout:
+        print(f"  ✗ Expected 12 passed, 0 failed")
+        # Show the invariants line if present
+        for line in result.stdout.split('\n'):
+            if 'Invariants:' in line or 'FAIL' in line:
+                print(f"    {line.strip()}")
         return False
 
-    print("  ✓ All 12 invariants pass over 1 season")
+    print("  ✓ All 12 invariants pass over 1 season (12 passed, 0 failed)")
     return True
 
 

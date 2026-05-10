@@ -9,6 +9,7 @@ Imports from all engine modules.
 
 import random
 import sqlite3
+from typing import Optional
 
 from ..utils.constants import (
     PLAY_TIME_RANGES,
@@ -90,6 +91,29 @@ def simulate_game(db_path: str, game_id: int, verbose: bool = True) -> dict:
         home_staff = _load_staff(conn, home_team['id'])
         away_staff = _load_staff(conn, away_team['id'])
 
+        # Load depth chart (Phase 5 Prompt #3)
+        from src.db.queries import get_depth_chart, get_league_state
+        league = get_league_state(conn)
+        season_year = league['current_season']
+        depth_chart_home = get_depth_chart(conn, home_team['id'], season_year)
+        depth_chart_away = get_depth_chart(conn, away_team['id'], season_year)
+
+        # Convert to lookup dict: {position_slot: [(slot_order, player_id), ...]}
+        def build_depth_chart_lookup(entries):
+            lookup = {}
+            for entry in entries:
+                slot = entry['position_slot']
+                if slot not in lookup:
+                    lookup[slot] = []
+                lookup[slot].append((entry['slot_order'], entry['player_id']))
+            # Sort by slot_order
+            for slot in lookup:
+                lookup[slot].sort(key=lambda x: x[0])
+            return lookup
+
+        depth_lookup_home = build_depth_chart_lookup(depth_chart_home)
+        depth_lookup_away = build_depth_chart_lookup(depth_chart_away)
+
         # Generate weather
         weather = generate_weather(
             home_team['stadium_type'],
@@ -115,8 +139,8 @@ def simulate_game(db_path: str, game_id: int, verbose: bool = True) -> dict:
         stats = StatsAccumulator(game_id, home_team['id'], away_team['id'])
 
         # Build team lineup dicts
-        home_lineup = _build_lineup(home_players, home_staff)
-        away_lineup = _build_lineup(away_players, away_staff)
+        home_lineup = _build_lineup(home_players, home_staff, depth_lookup_home)
+        away_lineup = _build_lineup(away_players, away_staff, depth_lookup_away)
 
         # Play log for output
         play_log = []
@@ -520,9 +544,14 @@ def _get_week_number(conn: sqlite3.Connection, week_id: int) -> int:
     return row['week_number'] if row else 1
 
 
-def _build_lineup(players: list[dict], staff: dict) -> dict:
+def _build_lineup(players: list[dict], staff: dict, depth_chart_lookup: dict) -> dict:
     """
     Build game-day lineup from roster, selecting starters by position.
+
+    Args:
+        players: List of player dicts
+        staff: Staff dict
+        depth_chart_lookup: {position_slot: [(slot_order, player_id), ...]}
 
     Returns dict with position -> list of player dicts (starters first, then backups).
     """
@@ -545,22 +574,25 @@ def _build_lineup(players: list[dict], staff: dict) -> dict:
             'all': group,
         }
 
+    # Store depth chart in lineup dict for later use (Phase 5 Prompt #3)
+    lineup['_depth_chart'] = depth_chart_lookup
+
     return lineup
 
 
 def _get_offense_personnel(lineup: dict, state: GameState, staff: dict, is_home: bool) -> dict:
     """Get current offensive personnel, handling substitutions."""
-    qb = _get_active_player(lineup, 'QB', state, 0)
-    rb = _get_active_player(lineup, 'RB', state, 0)
+    qb = _get_active_player(lineup, 'QB', state, 0, depth_slot='QB')
+    rb = _get_active_player(lineup, 'RB', state, 0, depth_slot='RB')
 
     receivers = []
-    # 3 WR
-    for i in range(min(3, len(lineup.get('WR', {}).get('all', [])))):
-        wr = _get_active_player(lineup, 'WR', state, i)
+    # 3 WR (use WR1, WR2, WR3 depth slots)
+    for i, slot in enumerate(['WR1', 'WR2', 'WR3']):
+        wr = _get_active_player(lineup, 'WR', state, i, depth_slot=slot)
         if wr:
             receivers.append(wr)
     # 1 TE
-    te = _get_active_player(lineup, 'TE', state, 0)
+    te = _get_active_player(lineup, 'TE', state, 0, depth_slot='TE')
     if te:
         receivers.append(te)
     # RB as receiver option
@@ -568,13 +600,13 @@ def _get_offense_personnel(lineup: dict, state: GameState, staff: dict, is_home:
         receivers.append(rb)
 
     oline = []
-    for i in range(min(5, len(lineup.get('OL', {}).get('all', [])))):
-        ol = _get_active_player(lineup, 'OL', state, i)
+    for i, slot in enumerate(['LT', 'LG', 'C', 'RG', 'RT']):
+        ol = _get_active_player(lineup, 'OL', state, i, depth_slot=slot)
         if ol:
             oline.append(ol)
 
-    kicker = _get_active_player(lineup, 'K', state, 0)
-    punter = _get_active_player(lineup, 'P', state, 0)
+    kicker = _get_active_player(lineup, 'K', state, 0, depth_slot='K')
+    punter = _get_active_player(lineup, 'P', state, 0, depth_slot='P')
 
     # Fallback: if no kicker/punter, use QB
     if not kicker:
@@ -595,26 +627,26 @@ def _get_offense_personnel(lineup: dict, state: GameState, staff: dict, is_home:
 def _get_defense_personnel(lineup: dict, state: GameState, staff: dict, is_home: bool) -> dict:
     """Get current defensive personnel."""
     dline = []
-    for i in range(min(4, len(lineup.get('DL', {}).get('all', [])))):
-        dl = _get_active_player(lineup, 'DL', state, i)
+    for i, slot in enumerate(['LE', 'DT1', 'DT2', 'RE']):
+        dl = _get_active_player(lineup, 'DL', state, i, depth_slot=slot)
         if dl:
             dline.append(dl)
 
     linebackers = []
-    for i in range(min(3, len(lineup.get('LB', {}).get('all', [])))):
-        lb = _get_active_player(lineup, 'LB', state, i)
+    for i, slot in enumerate(['LOLB', 'MLB', 'ROLB']):
+        lb = _get_active_player(lineup, 'LB', state, i, depth_slot=slot)
         if lb:
             linebackers.append(lb)
 
     corners = []
-    for i in range(min(2, len(lineup.get('CB', {}).get('all', [])))):
-        cb = _get_active_player(lineup, 'CB', state, i)
+    for i, slot in enumerate(['CB1', 'CB2']):
+        cb = _get_active_player(lineup, 'CB', state, i, depth_slot=slot)
         if cb:
             corners.append(cb)
 
     safeties = []
-    for i in range(min(2, len(lineup.get('S', {}).get('all', [])))):
-        s = _get_active_player(lineup, 'S', state, i)
+    for i, slot in enumerate(['FS', 'SS']):
+        s = _get_active_player(lineup, 'S', state, i, depth_slot=slot)
         if s:
             safeties.append(s)
 
@@ -629,10 +661,42 @@ def _get_defense_personnel(lineup: dict, state: GameState, staff: dict, is_home:
     }
 
 
-def _get_active_player(lineup: dict, position: str, state: GameState, index: int) -> dict:
+def _get_active_player(lineup: dict, position: str, state: GameState, index: int, depth_slot: Optional[str] = None) -> dict:
     """
     Get the active player at a position/index, handling injuries and fatigue subs.
+
+    Args:
+        lineup: Team lineup dict
+        position: Generic position (QB, RB, WR, etc.)
+        state: Game state
+        index: Position index (0 for starter, 1+ for backups)
+        depth_slot: Optional depth chart position slot (e.g., 'WR1', 'LT', 'CB1')
+
+    Returns:
+        Player dict or None
     """
+    # Phase 5 Prompt #3: Check depth chart first if depth_slot provided
+    if depth_slot and '_depth_chart' in lineup:
+        depth_entries = lineup['_depth_chart'].get(depth_slot, [])
+        for slot_order, player_id in depth_entries:
+            # Find player in roster
+            pos_data = lineup.get(position, {})
+            all_players = pos_data.get('all', [])
+            player = next((p for p in all_players if p['id'] == player_id), None)
+            if not player:
+                continue
+            # Skip if injured
+            if player_id in state.in_game_injuries:
+                continue
+            # Check fatigue substitution
+            stamina = state.player_stamina.get(player_id, 100)
+            if should_substitute(stamina, position):
+                continue
+            # Found healthy depth chart player — attach depth_slot for SAR penalty calculation
+            player['_depth_slot'] = depth_slot
+            return player
+
+    # Fallback to rating-based selection (existing code)
     pos_data = lineup.get(position, {})
     all_players = pos_data.get('all', [])
 
@@ -649,15 +713,24 @@ def _get_active_player(lineup: dict, position: str, state: GameState, index: int
         stamina = state.player_stamina.get(pid, 100)
         if should_substitute(stamina, position) and len(all_players) > index + 1:
             continue
+        # Attach depth_slot for SAR penalty calculation (Phase 5 Prompt #3 Cleanup Round 2)
+        if depth_slot:
+            p['_depth_slot'] = depth_slot
         return p
 
     # If all are fatigued/injured, return the best available
     for p in all_players:
         if p['id'] not in state.in_game_injuries:
+            if depth_slot:
+                p['_depth_slot'] = depth_slot
             return p
 
     # Last resort: return first player
-    return all_players[0] if all_players else None
+    if all_players:
+        if depth_slot:
+            all_players[0]['_depth_slot'] = depth_slot
+        return all_players[0]
+    return None
 
 
 def _get_returner(lineup: dict) -> dict:

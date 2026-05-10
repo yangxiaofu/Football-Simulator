@@ -31,6 +31,9 @@ from ..utils.constants import (
     QB_COACH_PRESSURE_REDUCTION,
     RB_COACH_VISION_BONUS,
     DB_COACH_COVERAGE_BONUS,
+    OUT_OF_POSITION_SAR_PENALTY,
+    DEPTH_CHART_TO_PLAYER_POSITION,
+    FLEXIBLE_POSITION_EQUIVALENTS,
 )
 from .weather import get_weather_modifiers
 from .fatigue import get_fatigue_penalty
@@ -268,6 +271,25 @@ def calculate_sar(
         clutch_mod = calculate_clutch_modifier(clutch_rating, is_playoff)
 
     sar = int(base + scheme_bonus + coach_bonus + home_bonus + weather_mod + fatigue_mod + clutch_mod)
+
+    # Phase 5 Prompt #3 Cleanup Round 2: Position mismatch penalty
+    depth_slot = player.get('_depth_slot')
+    if depth_slot:
+        player_position = player.get('position', '')
+        expected_position = DEPTH_CHART_TO_PLAYER_POSITION.get(depth_slot, depth_slot)
+
+        # Check if position matches
+        if player_position != expected_position:
+            # Check flexible equivalents (e.g., OL can play any O-line slot)
+            is_flexible = False
+            for generic_pos, allowed_slots in FLEXIBLE_POSITION_EQUIVALENTS.items():
+                if player_position == generic_pos and depth_slot in allowed_slots:
+                    is_flexible = True
+                    break
+
+            # Apply penalty if not a flexible match
+            if not is_flexible:
+                sar -= OUT_OF_POSITION_SAR_PENALTY
 
     # Clamp to valid range
     return max(1, min(99, sar))
