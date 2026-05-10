@@ -1679,6 +1679,79 @@ AWARD_PASS_DEFLECTIONS_WEIGHT = 3.0
 
 
 # ======================
+# WEEKLY STATS & AWARDS (Phase 5)
+# ======================
+
+# Stat columns for programmatic access (DRY principle)
+STAT_COLUMNS_PLAYER = [
+    'pass_attempts', 'completions', 'pass_yards', 'pass_tds',
+    'interceptions_thrown', 'sacks_taken', 'carries', 'rush_yards',
+    'rush_tds', 'fumbles', 'targets', 'receptions', 'rec_yards',
+    'rec_tds', 'tackles', 'sacks', 'interceptions', 'pass_deflections',
+    'forced_fumbles', 'fg_attempts', 'fg_made', 'fg_long',
+    'xp_attempts', 'xp_made', 'punts', 'punt_yards', 'punt_returns',
+    'punt_return_yards', 'punt_return_tds', 'kick_returns',
+    'kick_return_yards', 'kick_return_tds',
+]
+
+STAT_COLUMNS_TEAM = [
+    'points_scored', 'total_yards', 'pass_yards', 'rush_yards',
+    'turnovers', 'third_down_conversions', 'third_down_attempts',
+    'points_allowed', 'yards_allowed', 'sacks_recorded', 'takeaways',
+]
+
+# Stars of the Week minimum thresholds
+STAR_MIN_PASS_YARDS = 200
+STAR_MIN_RUSH_YARDS = 80
+STAR_MIN_REC_YARDS = 80
+STAR_MIN_TACKLES = 8
+STAR_MIN_SACKS = 1.0
+
+# Special teams scoring weights (reuse offensive/defensive weights from AWARD_ constants)
+STAR_FG_WEIGHT = 3.0
+STAR_FG_LONG_BONUS = 10.0        # Bonus for 50+ yard FG
+STAR_RETURN_TD_WEIGHT = 50.0      # Punt/kick return TDs
+
+# Weekly award types
+WEEKLY_AWARD_TYPES = ['OFFENSE', 'DEFENSE', 'SPECIAL_TEAMS', 'USER_TEAM_MVP']
+
+
+# ======================
+# LEADERBOARD DISPLAY (Phase 5 Prompt #2)
+# ======================
+
+# Leaderboard defaults
+LEADERBOARD_DEFAULT_LIMIT = 10
+LEADERBOARD_MAX_LIMIT = 50
+
+# Stat category map (CLI argument → database column name)
+LEADERBOARD_STAT_MAP = {
+    # Offense
+    'passing': 'pass_yards',
+    'rushing': 'rush_yards',
+    'receiving': 'rec_yards',
+    # Defense
+    'defense': 'tackles',
+    'sacks': 'sacks',
+    'interceptions': 'interceptions',
+    # Special Teams (future)
+    'kicking': 'fg_made',
+    'punting': 'punts',
+}
+
+# NFL-style leaderboard qualifiers (minimum attempts per game)
+# Formula: MIN = qualifier × games_played
+LEADERBOARD_QUALIFIER_PASS_ATT_PER_GAME = 14.0    # 14 att/game for passer rating
+LEADERBOARD_QUALIFIER_RUSH_CAR_PER_GAME = 6.25    # 6.25 car/game for rushing title
+
+# Display column widths (for consistent table formatting)
+LEADERBOARD_RANK_WIDTH = 5
+LEADERBOARD_NAME_WIDTH = 25
+LEADERBOARD_TEAM_WIDTH = 5
+LEADERBOARD_STAT_WIDTH = 6
+
+
+# ======================
 # OFFSEASON ORCHESTRATION
 # ======================
 

@@ -77,6 +77,10 @@ def advance_week(
         # Update standings
         update_all_standings(conn, season_year)
 
+        # Aggregate weekly stats (Phase 5)
+        from ..league.weekly_stats import aggregate_week_stats
+        aggregate_week_stats(conn, season_year, week_num, is_playoff=False)
+
         # Update sentiment drivers every 4 weeks
         if week_num % 4 == 0:
             from ..league.owner_sentiment import update_weekly_drivers

@@ -47,6 +47,7 @@ def get_connection(save_path: str) -> sqlite3.Connection:
     ensure_press_tables(conn)
     ensure_tier2_press_tables(conn)
     ensure_narrative_moment_table(conn)
+    ensure_in_season_stats_tables(conn)
 
     return conn
 
@@ -1006,6 +1007,250 @@ def ensure_narrative_moment_table(conn: sqlite3.Connection) -> None:
             FOREIGN KEY (coach_id) REFERENCES coach_career(id)
         )
     """)
+    conn.commit()
+
+
+def ensure_in_season_stats_tables(conn: sqlite3.Connection) -> None:
+    """
+    Create weekly stats cache tables if they don't exist.
+
+    Safe to call multiple times. Used for migrating existing save files
+    that were created before the weekly stats system was added (Phase 5).
+
+    Creates 5 tables:
+    - player_week_stats: per-player per-week snapshot
+    - player_season_running: running season totals
+    - team_week_stats: per-team per-week snapshot
+    - team_season_running: running team totals
+    - weekly_award: Stars of the Week awards
+
+    Args:
+        conn: Database connection
+    """
+    # player_week_stats
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS player_week_stats (
+            id                      INTEGER PRIMARY KEY,
+            season_year             INTEGER NOT NULL,
+            week_number             INTEGER NOT NULL,
+            player_id               INTEGER NOT NULL,
+            team_id                 INTEGER NOT NULL,
+            is_playoff              INTEGER NOT NULL DEFAULT 0,
+            pass_attempts           INTEGER NOT NULL DEFAULT 0,
+            completions             INTEGER NOT NULL DEFAULT 0,
+            pass_yards              INTEGER NOT NULL DEFAULT 0,
+            pass_tds                INTEGER NOT NULL DEFAULT 0,
+            interceptions_thrown    INTEGER NOT NULL DEFAULT 0,
+            sacks_taken             INTEGER NOT NULL DEFAULT 0,
+            carries                 INTEGER NOT NULL DEFAULT 0,
+            rush_yards              INTEGER NOT NULL DEFAULT 0,
+            rush_tds                INTEGER NOT NULL DEFAULT 0,
+            fumbles                 INTEGER NOT NULL DEFAULT 0,
+            targets                 INTEGER NOT NULL DEFAULT 0,
+            receptions              INTEGER NOT NULL DEFAULT 0,
+            rec_yards               INTEGER NOT NULL DEFAULT 0,
+            rec_tds                 INTEGER NOT NULL DEFAULT 0,
+            tackles                 INTEGER NOT NULL DEFAULT 0,
+            sacks                   REAL NOT NULL DEFAULT 0,
+            interceptions           INTEGER NOT NULL DEFAULT 0,
+            pass_deflections        INTEGER NOT NULL DEFAULT 0,
+            forced_fumbles          INTEGER NOT NULL DEFAULT 0,
+            fg_attempts             INTEGER NOT NULL DEFAULT 0,
+            fg_made                 INTEGER NOT NULL DEFAULT 0,
+            fg_long                 INTEGER NOT NULL DEFAULT 0,
+            xp_attempts             INTEGER NOT NULL DEFAULT 0,
+            xp_made                 INTEGER NOT NULL DEFAULT 0,
+            punts                   INTEGER NOT NULL DEFAULT 0,
+            punt_yards              INTEGER NOT NULL DEFAULT 0,
+            punt_returns            INTEGER NOT NULL DEFAULT 0,
+            punt_return_yards       INTEGER NOT NULL DEFAULT 0,
+            punt_return_tds         INTEGER NOT NULL DEFAULT 0,
+            kick_returns            INTEGER NOT NULL DEFAULT 0,
+            kick_return_yards       INTEGER NOT NULL DEFAULT 0,
+            kick_return_tds         INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (player_id) REFERENCES player(id),
+            FOREIGN KEY (team_id) REFERENCES team(id),
+            UNIQUE(season_year, week_number, player_id, is_playoff)
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_player_week_stats_week
+        ON player_week_stats(season_year, week_number, is_playoff)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_player_week_stats_player
+        ON player_week_stats(player_id, season_year)
+    """)
+
+    # player_season_running
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS player_season_running (
+            id                      INTEGER PRIMARY KEY,
+            season_year             INTEGER NOT NULL,
+            player_id               INTEGER NOT NULL,
+            team_id                 INTEGER NOT NULL,
+            is_playoff              INTEGER NOT NULL DEFAULT 0,
+            games_played            INTEGER NOT NULL DEFAULT 0,
+            pass_attempts           INTEGER NOT NULL DEFAULT 0,
+            completions             INTEGER NOT NULL DEFAULT 0,
+            pass_yards              INTEGER NOT NULL DEFAULT 0,
+            pass_tds                INTEGER NOT NULL DEFAULT 0,
+            interceptions_thrown    INTEGER NOT NULL DEFAULT 0,
+            sacks_taken             INTEGER NOT NULL DEFAULT 0,
+            carries                 INTEGER NOT NULL DEFAULT 0,
+            rush_yards              INTEGER NOT NULL DEFAULT 0,
+            rush_tds                INTEGER NOT NULL DEFAULT 0,
+            fumbles                 INTEGER NOT NULL DEFAULT 0,
+            targets                 INTEGER NOT NULL DEFAULT 0,
+            receptions              INTEGER NOT NULL DEFAULT 0,
+            rec_yards               INTEGER NOT NULL DEFAULT 0,
+            rec_tds                 INTEGER NOT NULL DEFAULT 0,
+            tackles                 INTEGER NOT NULL DEFAULT 0,
+            sacks                   REAL NOT NULL DEFAULT 0,
+            interceptions           INTEGER NOT NULL DEFAULT 0,
+            pass_deflections        INTEGER NOT NULL DEFAULT 0,
+            forced_fumbles          INTEGER NOT NULL DEFAULT 0,
+            fg_attempts             INTEGER NOT NULL DEFAULT 0,
+            fg_made                 INTEGER NOT NULL DEFAULT 0,
+            fg_long                 INTEGER NOT NULL DEFAULT 0,
+            xp_attempts             INTEGER NOT NULL DEFAULT 0,
+            xp_made                 INTEGER NOT NULL DEFAULT 0,
+            punts                   INTEGER NOT NULL DEFAULT 0,
+            punt_yards              INTEGER NOT NULL DEFAULT 0,
+            punt_returns            INTEGER NOT NULL DEFAULT 0,
+            punt_return_yards       INTEGER NOT NULL DEFAULT 0,
+            punt_return_tds         INTEGER NOT NULL DEFAULT 0,
+            kick_returns            INTEGER NOT NULL DEFAULT 0,
+            kick_return_yards       INTEGER NOT NULL DEFAULT 0,
+            kick_return_tds         INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (player_id) REFERENCES player(id),
+            FOREIGN KEY (team_id) REFERENCES team(id),
+            UNIQUE(season_year, player_id, is_playoff)
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_player_season_running_player
+        ON player_season_running(player_id, season_year)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_player_season_running_pass_yards
+        ON player_season_running(season_year, is_playoff, pass_yards DESC)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_player_season_running_rush_yards
+        ON player_season_running(season_year, is_playoff, rush_yards DESC)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_player_season_running_rec_yards
+        ON player_season_running(season_year, is_playoff, rec_yards DESC)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_player_season_running_tackles
+        ON player_season_running(season_year, is_playoff, tackles DESC)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_player_season_running_sacks
+        ON player_season_running(season_year, is_playoff, sacks DESC)
+    """)
+
+    # team_week_stats
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS team_week_stats (
+            id                      INTEGER PRIMARY KEY,
+            season_year             INTEGER NOT NULL,
+            week_number             INTEGER NOT NULL,
+            team_id                 INTEGER NOT NULL,
+            is_playoff              INTEGER NOT NULL DEFAULT 0,
+            points_scored           INTEGER NOT NULL DEFAULT 0,
+            total_yards             INTEGER NOT NULL DEFAULT 0,
+            pass_yards              INTEGER NOT NULL DEFAULT 0,
+            rush_yards              INTEGER NOT NULL DEFAULT 0,
+            turnovers               INTEGER NOT NULL DEFAULT 0,
+            third_down_conversions  INTEGER NOT NULL DEFAULT 0,
+            third_down_attempts     INTEGER NOT NULL DEFAULT 0,
+            points_allowed          INTEGER NOT NULL DEFAULT 0,
+            yards_allowed           INTEGER NOT NULL DEFAULT 0,
+            sacks_recorded          REAL NOT NULL DEFAULT 0,
+            takeaways               INTEGER NOT NULL DEFAULT 0,
+            won                     INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (team_id) REFERENCES team(id),
+            UNIQUE(season_year, week_number, team_id, is_playoff)
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_team_week_stats_week
+        ON team_week_stats(season_year, week_number, is_playoff)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_team_week_stats_team
+        ON team_week_stats(team_id, season_year)
+    """)
+
+    # team_season_running
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS team_season_running (
+            id                      INTEGER PRIMARY KEY,
+            season_year             INTEGER NOT NULL,
+            team_id                 INTEGER NOT NULL,
+            is_playoff              INTEGER NOT NULL DEFAULT 0,
+            games_played            INTEGER NOT NULL DEFAULT 0,
+            points_scored           INTEGER NOT NULL DEFAULT 0,
+            total_yards             INTEGER NOT NULL DEFAULT 0,
+            pass_yards              INTEGER NOT NULL DEFAULT 0,
+            rush_yards              INTEGER NOT NULL DEFAULT 0,
+            turnovers               INTEGER NOT NULL DEFAULT 0,
+            third_down_conversions  INTEGER NOT NULL DEFAULT 0,
+            third_down_attempts     INTEGER NOT NULL DEFAULT 0,
+            points_allowed          INTEGER NOT NULL DEFAULT 0,
+            yards_allowed           INTEGER NOT NULL DEFAULT 0,
+            sacks_recorded          REAL NOT NULL DEFAULT 0,
+            takeaways               INTEGER NOT NULL DEFAULT 0,
+            wins                    INTEGER NOT NULL DEFAULT 0,
+            losses                  INTEGER NOT NULL DEFAULT 0,
+            ties                    INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (team_id) REFERENCES team(id),
+            UNIQUE(season_year, team_id, is_playoff)
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_team_season_running_team
+        ON team_season_running(team_id, season_year)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_team_season_running_points_scored
+        ON team_season_running(season_year, is_playoff, points_scored DESC)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_team_season_running_points_allowed
+        ON team_season_running(season_year, is_playoff, points_allowed ASC)
+    """)
+
+    # weekly_award
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS weekly_award (
+            id                  INTEGER PRIMARY KEY,
+            season_year         INTEGER NOT NULL,
+            week_number         INTEGER NOT NULL,
+            is_playoff          INTEGER NOT NULL DEFAULT 0,
+            award_type          TEXT NOT NULL,
+            player_id           INTEGER NOT NULL,
+            team_id             INTEGER NOT NULL,
+            score               REAL NOT NULL,
+            narrative_blurb     TEXT NOT NULL,
+            FOREIGN KEY (player_id) REFERENCES player(id),
+            FOREIGN KEY (team_id) REFERENCES team(id),
+            UNIQUE(season_year, week_number, is_playoff, award_type)
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_weekly_award_week
+        ON weekly_award(season_year, week_number, is_playoff)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_weekly_award_player
+        ON weekly_award(player_id, season_year)
+    """)
+
     conn.commit()
 
 

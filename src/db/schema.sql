@@ -1186,3 +1186,221 @@ CREATE TABLE IF NOT EXISTS narrative_moment_shown (
     PRIMARY KEY (coach_id, moment_type),
     FOREIGN KEY (coach_id) REFERENCES coach_career(id)
 );
+
+-- ====================
+-- 13. WEEKLY STATS CACHE (Phase 5)
+-- ====================
+
+-- Per-player per-week snapshot (ephemeral, deleted at season archive)
+CREATE TABLE IF NOT EXISTS player_week_stats (
+    id                      INTEGER PRIMARY KEY,
+    season_year             INTEGER NOT NULL,
+    week_number             INTEGER NOT NULL,
+    player_id               INTEGER NOT NULL,
+    team_id                 INTEGER NOT NULL,
+    is_playoff              INTEGER NOT NULL DEFAULT 0,
+
+    -- Passing
+    pass_attempts           INTEGER NOT NULL DEFAULT 0,
+    completions             INTEGER NOT NULL DEFAULT 0,
+    pass_yards              INTEGER NOT NULL DEFAULT 0,
+    pass_tds                INTEGER NOT NULL DEFAULT 0,
+    interceptions_thrown    INTEGER NOT NULL DEFAULT 0,
+    sacks_taken             INTEGER NOT NULL DEFAULT 0,
+
+    -- Rushing
+    carries                 INTEGER NOT NULL DEFAULT 0,
+    rush_yards              INTEGER NOT NULL DEFAULT 0,
+    rush_tds                INTEGER NOT NULL DEFAULT 0,
+    fumbles                 INTEGER NOT NULL DEFAULT 0,
+
+    -- Receiving
+    targets                 INTEGER NOT NULL DEFAULT 0,
+    receptions              INTEGER NOT NULL DEFAULT 0,
+    rec_yards               INTEGER NOT NULL DEFAULT 0,
+    rec_tds                 INTEGER NOT NULL DEFAULT 0,
+
+    -- Defense
+    tackles                 INTEGER NOT NULL DEFAULT 0,
+    sacks                   REAL NOT NULL DEFAULT 0,
+    interceptions           INTEGER NOT NULL DEFAULT 0,
+    pass_deflections        INTEGER NOT NULL DEFAULT 0,
+    forced_fumbles          INTEGER NOT NULL DEFAULT 0,
+
+    -- Kicking
+    fg_attempts             INTEGER NOT NULL DEFAULT 0,
+    fg_made                 INTEGER NOT NULL DEFAULT 0,
+    fg_long                 INTEGER NOT NULL DEFAULT 0,
+    xp_attempts             INTEGER NOT NULL DEFAULT 0,
+    xp_made                 INTEGER NOT NULL DEFAULT 0,
+    punts                   INTEGER NOT NULL DEFAULT 0,
+    punt_yards              INTEGER NOT NULL DEFAULT 0,
+
+    -- Returns
+    punt_returns            INTEGER NOT NULL DEFAULT 0,
+    punt_return_yards       INTEGER NOT NULL DEFAULT 0,
+    punt_return_tds         INTEGER NOT NULL DEFAULT 0,
+    kick_returns            INTEGER NOT NULL DEFAULT 0,
+    kick_return_yards       INTEGER NOT NULL DEFAULT 0,
+    kick_return_tds         INTEGER NOT NULL DEFAULT 0,
+
+    FOREIGN KEY (player_id) REFERENCES player(id),
+    FOREIGN KEY (team_id) REFERENCES team(id),
+    UNIQUE(season_year, week_number, player_id, is_playoff)
+);
+
+CREATE INDEX IF NOT EXISTS idx_player_week_stats_week ON player_week_stats(season_year, week_number, is_playoff);
+CREATE INDEX IF NOT EXISTS idx_player_week_stats_player ON player_week_stats(player_id, season_year);
+
+-- Running season totals (live cache, updated incrementally)
+CREATE TABLE IF NOT EXISTS player_season_running (
+    id                      INTEGER PRIMARY KEY,
+    season_year             INTEGER NOT NULL,
+    player_id               INTEGER NOT NULL,
+    team_id                 INTEGER NOT NULL,
+    is_playoff              INTEGER NOT NULL DEFAULT 0,
+    games_played            INTEGER NOT NULL DEFAULT 0,
+
+    -- Passing
+    pass_attempts           INTEGER NOT NULL DEFAULT 0,
+    completions             INTEGER NOT NULL DEFAULT 0,
+    pass_yards              INTEGER NOT NULL DEFAULT 0,
+    pass_tds                INTEGER NOT NULL DEFAULT 0,
+    interceptions_thrown    INTEGER NOT NULL DEFAULT 0,
+    sacks_taken             INTEGER NOT NULL DEFAULT 0,
+
+    -- Rushing
+    carries                 INTEGER NOT NULL DEFAULT 0,
+    rush_yards              INTEGER NOT NULL DEFAULT 0,
+    rush_tds                INTEGER NOT NULL DEFAULT 0,
+    fumbles                 INTEGER NOT NULL DEFAULT 0,
+
+    -- Receiving
+    targets                 INTEGER NOT NULL DEFAULT 0,
+    receptions              INTEGER NOT NULL DEFAULT 0,
+    rec_yards               INTEGER NOT NULL DEFAULT 0,
+    rec_tds                 INTEGER NOT NULL DEFAULT 0,
+
+    -- Defense
+    tackles                 INTEGER NOT NULL DEFAULT 0,
+    sacks                   REAL NOT NULL DEFAULT 0,
+    interceptions           INTEGER NOT NULL DEFAULT 0,
+    pass_deflections        INTEGER NOT NULL DEFAULT 0,
+    forced_fumbles          INTEGER NOT NULL DEFAULT 0,
+
+    -- Kicking
+    fg_attempts             INTEGER NOT NULL DEFAULT 0,
+    fg_made                 INTEGER NOT NULL DEFAULT 0,
+    fg_long                 INTEGER NOT NULL DEFAULT 0,
+    xp_attempts             INTEGER NOT NULL DEFAULT 0,
+    xp_made                 INTEGER NOT NULL DEFAULT 0,
+    punts                   INTEGER NOT NULL DEFAULT 0,
+    punt_yards              INTEGER NOT NULL DEFAULT 0,
+
+    -- Returns
+    punt_returns            INTEGER NOT NULL DEFAULT 0,
+    punt_return_yards       INTEGER NOT NULL DEFAULT 0,
+    punt_return_tds         INTEGER NOT NULL DEFAULT 0,
+    kick_returns            INTEGER NOT NULL DEFAULT 0,
+    kick_return_yards       INTEGER NOT NULL DEFAULT 0,
+    kick_return_tds         INTEGER NOT NULL DEFAULT 0,
+
+    FOREIGN KEY (player_id) REFERENCES player(id),
+    FOREIGN KEY (team_id) REFERENCES team(id),
+    UNIQUE(season_year, player_id, is_playoff)
+);
+
+CREATE INDEX IF NOT EXISTS idx_player_season_running_player ON player_season_running(player_id, season_year);
+CREATE INDEX IF NOT EXISTS idx_player_season_running_pass_yards ON player_season_running(season_year, is_playoff, pass_yards DESC);
+CREATE INDEX IF NOT EXISTS idx_player_season_running_rush_yards ON player_season_running(season_year, is_playoff, rush_yards DESC);
+CREATE INDEX IF NOT EXISTS idx_player_season_running_rec_yards ON player_season_running(season_year, is_playoff, rec_yards DESC);
+CREATE INDEX IF NOT EXISTS idx_player_season_running_tackles ON player_season_running(season_year, is_playoff, tackles DESC);
+CREATE INDEX IF NOT EXISTS idx_player_season_running_sacks ON player_season_running(season_year, is_playoff, sacks DESC);
+
+-- Per-team per-week snapshot (ephemeral)
+CREATE TABLE IF NOT EXISTS team_week_stats (
+    id                      INTEGER PRIMARY KEY,
+    season_year             INTEGER NOT NULL,
+    week_number             INTEGER NOT NULL,
+    team_id                 INTEGER NOT NULL,
+    is_playoff              INTEGER NOT NULL DEFAULT 0,
+
+    -- Offensive stats
+    points_scored           INTEGER NOT NULL DEFAULT 0,
+    total_yards             INTEGER NOT NULL DEFAULT 0,
+    pass_yards              INTEGER NOT NULL DEFAULT 0,
+    rush_yards              INTEGER NOT NULL DEFAULT 0,
+    turnovers               INTEGER NOT NULL DEFAULT 0,
+    third_down_conversions  INTEGER NOT NULL DEFAULT 0,
+    third_down_attempts     INTEGER NOT NULL DEFAULT 0,
+
+    -- Defensive stats
+    points_allowed          INTEGER NOT NULL DEFAULT 0,
+    yards_allowed           INTEGER NOT NULL DEFAULT 0,
+    sacks_recorded          REAL NOT NULL DEFAULT 0,
+    takeaways               INTEGER NOT NULL DEFAULT 0,
+
+    -- Game result
+    won                     INTEGER NOT NULL DEFAULT 0,
+
+    FOREIGN KEY (team_id) REFERENCES team(id),
+    UNIQUE(season_year, week_number, team_id, is_playoff)
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_week_stats_week ON team_week_stats(season_year, week_number, is_playoff);
+CREATE INDEX IF NOT EXISTS idx_team_week_stats_team ON team_week_stats(team_id, season_year);
+
+-- Running team totals (live cache)
+CREATE TABLE IF NOT EXISTS team_season_running (
+    id                      INTEGER PRIMARY KEY,
+    season_year             INTEGER NOT NULL,
+    team_id                 INTEGER NOT NULL,
+    is_playoff              INTEGER NOT NULL DEFAULT 0,
+    games_played            INTEGER NOT NULL DEFAULT 0,
+
+    -- Offensive stats
+    points_scored           INTEGER NOT NULL DEFAULT 0,
+    total_yards             INTEGER NOT NULL DEFAULT 0,
+    pass_yards              INTEGER NOT NULL DEFAULT 0,
+    rush_yards              INTEGER NOT NULL DEFAULT 0,
+    turnovers               INTEGER NOT NULL DEFAULT 0,
+    third_down_conversions  INTEGER NOT NULL DEFAULT 0,
+    third_down_attempts     INTEGER NOT NULL DEFAULT 0,
+
+    -- Defensive stats
+    points_allowed          INTEGER NOT NULL DEFAULT 0,
+    yards_allowed           INTEGER NOT NULL DEFAULT 0,
+    sacks_recorded          REAL NOT NULL DEFAULT 0,
+    takeaways               INTEGER NOT NULL DEFAULT 0,
+
+    -- Record
+    wins                    INTEGER NOT NULL DEFAULT 0,
+    losses                  INTEGER NOT NULL DEFAULT 0,
+    ties                    INTEGER NOT NULL DEFAULT 0,
+
+    FOREIGN KEY (team_id) REFERENCES team(id),
+    UNIQUE(season_year, team_id, is_playoff)
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_season_running_team ON team_season_running(team_id, season_year);
+CREATE INDEX IF NOT EXISTS idx_team_season_running_points_scored ON team_season_running(season_year, is_playoff, points_scored DESC);
+CREATE INDEX IF NOT EXISTS idx_team_season_running_points_allowed ON team_season_running(season_year, is_playoff, points_allowed ASC);
+
+-- Stars of the Week awards
+CREATE TABLE IF NOT EXISTS weekly_award (
+    id                  INTEGER PRIMARY KEY,
+    season_year         INTEGER NOT NULL,
+    week_number         INTEGER NOT NULL,
+    is_playoff          INTEGER NOT NULL DEFAULT 0,
+    award_type          TEXT NOT NULL,  -- 'OFFENSE' | 'DEFENSE' | 'SPECIAL_TEAMS' | 'USER_TEAM_MVP'
+    player_id           INTEGER NOT NULL,
+    team_id             INTEGER NOT NULL,
+    score               REAL NOT NULL,
+    narrative_blurb     TEXT NOT NULL,
+    FOREIGN KEY (player_id) REFERENCES player(id),
+    FOREIGN KEY (team_id) REFERENCES team(id),
+    UNIQUE(season_year, week_number, is_playoff, award_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_weekly_award_week ON weekly_award(season_year, week_number, is_playoff);
+CREATE INDEX IF NOT EXISTS idx_weekly_award_player ON weekly_award(player_id, season_year);

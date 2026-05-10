@@ -3447,3 +3447,645 @@ def create_ai_coach(
         VALUES (?, ?, ?, ?, ?, 0, 1)
     """, (first_name, last_name, age, archetype, season_year))
     return cursor.lastrowid
+
+
+# ====================================
+# PHASE 5 — WEEKLY STATS QUERIES
+# ====================================
+
+# ========== Helper queries ==========
+
+def get_box_scores_for_game(conn: sqlite3.Connection, game_id: int) -> list[sqlite3.Row]:
+    """Get all box scores for a specific game."""
+    return conn.execute("""
+        SELECT * FROM box_score WHERE game_id = ?
+    """, (game_id,)).fetchall()
+
+
+# ========== player_week_stats ==========
+
+def insert_player_week_stats(
+    conn: sqlite3.Connection, season_year: int, week_number: int,
+    is_playoff: int, stats_dict: dict
+) -> int:
+    """
+    Insert a player week stats snapshot.
+
+    Args:
+        conn: Database connection
+        season_year: Season year
+        week_number: Week number
+        is_playoff: 0 for regular season, 1 for playoffs
+        stats_dict: Dict with keys: player_id, team_id, and all stat columns
+
+    Returns:
+        Row ID of inserted record
+    """
+    cursor = conn.execute("""
+        INSERT INTO player_week_stats (
+            season_year, week_number, player_id, team_id, is_playoff,
+            pass_attempts, completions, pass_yards, pass_tds, interceptions_thrown, sacks_taken,
+            carries, rush_yards, rush_tds, fumbles,
+            targets, receptions, rec_yards, rec_tds,
+            tackles, sacks, interceptions, pass_deflections, forced_fumbles,
+            fg_attempts, fg_made, fg_long, xp_attempts, xp_made, punts, punt_yards,
+            punt_returns, punt_return_yards, punt_return_tds,
+            kick_returns, kick_return_yards, kick_return_tds
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        season_year, week_number, stats_dict['player_id'], stats_dict['team_id'], is_playoff,
+        stats_dict.get('pass_attempts', 0), stats_dict.get('completions', 0),
+        stats_dict.get('pass_yards', 0), stats_dict.get('pass_tds', 0),
+        stats_dict.get('interceptions_thrown', 0), stats_dict.get('sacks_taken', 0),
+        stats_dict.get('carries', 0), stats_dict.get('rush_yards', 0),
+        stats_dict.get('rush_tds', 0), stats_dict.get('fumbles', 0),
+        stats_dict.get('targets', 0), stats_dict.get('receptions', 0),
+        stats_dict.get('rec_yards', 0), stats_dict.get('rec_tds', 0),
+        stats_dict.get('tackles', 0), stats_dict.get('sacks', 0.0),
+        stats_dict.get('interceptions', 0), stats_dict.get('pass_deflections', 0),
+        stats_dict.get('forced_fumbles', 0), stats_dict.get('fg_attempts', 0),
+        stats_dict.get('fg_made', 0), stats_dict.get('fg_long', 0),
+        stats_dict.get('xp_attempts', 0), stats_dict.get('xp_made', 0),
+        stats_dict.get('punts', 0), stats_dict.get('punt_yards', 0),
+        stats_dict.get('punt_returns', 0), stats_dict.get('punt_return_yards', 0),
+        stats_dict.get('punt_return_tds', 0), stats_dict.get('kick_returns', 0),
+        stats_dict.get('kick_return_yards', 0), stats_dict.get('kick_return_tds', 0)
+    ))
+    return cursor.lastrowid
+
+
+def get_player_week_stats(
+    conn: sqlite3.Connection, season_year: int, week_number: int,
+    player_id: int, is_playoff: int
+) -> Optional[sqlite3.Row]:
+    """Get player week stats for a specific week."""
+    return conn.execute("""
+        SELECT * FROM player_week_stats
+        WHERE season_year = ? AND week_number = ? AND player_id = ? AND is_playoff = ?
+    """, (season_year, week_number, player_id, is_playoff)).fetchone()
+
+
+def get_all_player_week_stats(
+    conn: sqlite3.Connection, season_year: int, week_number: int, is_playoff: int
+) -> list[sqlite3.Row]:
+    """Get all player week stats for a specific week."""
+    return conn.execute("""
+        SELECT * FROM player_week_stats
+        WHERE season_year = ? AND week_number = ? AND is_playoff = ?
+    """, (season_year, week_number, is_playoff)).fetchall()
+
+
+def get_player_weekly_history(
+    conn: sqlite3.Connection, player_id: int, season_year: int, is_playoff: int
+) -> list[sqlite3.Row]:
+    """Get week-by-week stats for a player in a season."""
+    return conn.execute("""
+        SELECT * FROM player_week_stats
+        WHERE player_id = ? AND season_year = ? AND is_playoff = ?
+        ORDER BY week_number ASC
+    """, (player_id, season_year, is_playoff)).fetchall()
+
+
+def delete_player_week_stats_for_season(conn: sqlite3.Connection, season_year: int) -> int:
+    """Delete all player week stats for a season (called at archive)."""
+    cursor = conn.execute("""
+        DELETE FROM player_week_stats WHERE season_year = ?
+    """, (season_year,))
+    return cursor.rowcount
+
+
+# ========== player_season_running ==========
+
+def insert_player_season_running(
+    conn: sqlite3.Connection, season_year: int, player_id: int,
+    team_id: int, is_playoff: int, stats_dict: dict
+) -> int:
+    """
+    Insert a new running season total for a player.
+
+    Args:
+        conn: Database connection
+        season_year: Season year
+        player_id: Player ID
+        team_id: Team ID
+        is_playoff: 0 for regular season, 1 for playoffs
+        stats_dict: Dict with all stat columns
+
+    Returns:
+        Row ID of inserted record
+    """
+    cursor = conn.execute("""
+        INSERT INTO player_season_running (
+            season_year, player_id, team_id, is_playoff, games_played,
+            pass_attempts, completions, pass_yards, pass_tds, interceptions_thrown, sacks_taken,
+            carries, rush_yards, rush_tds, fumbles,
+            targets, receptions, rec_yards, rec_tds,
+            tackles, sacks, interceptions, pass_deflections, forced_fumbles,
+            fg_attempts, fg_made, fg_long, xp_attempts, xp_made, punts, punt_yards,
+            punt_returns, punt_return_yards, punt_return_tds,
+            kick_returns, kick_return_yards, kick_return_tds
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        season_year, player_id, team_id, is_playoff, stats_dict.get('games_played', 0),
+        stats_dict.get('pass_attempts', 0), stats_dict.get('completions', 0),
+        stats_dict.get('pass_yards', 0), stats_dict.get('pass_tds', 0),
+        stats_dict.get('interceptions_thrown', 0), stats_dict.get('sacks_taken', 0),
+        stats_dict.get('carries', 0), stats_dict.get('rush_yards', 0),
+        stats_dict.get('rush_tds', 0), stats_dict.get('fumbles', 0),
+        stats_dict.get('targets', 0), stats_dict.get('receptions', 0),
+        stats_dict.get('rec_yards', 0), stats_dict.get('rec_tds', 0),
+        stats_dict.get('tackles', 0), stats_dict.get('sacks', 0.0),
+        stats_dict.get('interceptions', 0), stats_dict.get('pass_deflections', 0),
+        stats_dict.get('forced_fumbles', 0), stats_dict.get('fg_attempts', 0),
+        stats_dict.get('fg_made', 0), stats_dict.get('fg_long', 0),
+        stats_dict.get('xp_attempts', 0), stats_dict.get('xp_made', 0),
+        stats_dict.get('punts', 0), stats_dict.get('punt_yards', 0),
+        stats_dict.get('punt_returns', 0), stats_dict.get('punt_return_yards', 0),
+        stats_dict.get('punt_return_tds', 0), stats_dict.get('kick_returns', 0),
+        stats_dict.get('kick_return_yards', 0), stats_dict.get('kick_return_tds', 0)
+    ))
+    return cursor.lastrowid
+
+
+def get_player_season_running(
+    conn: sqlite3.Connection, season_year: int, player_id: int, is_playoff: int
+) -> Optional[sqlite3.Row]:
+    """Get running season stats for a player."""
+    return conn.execute("""
+        SELECT * FROM player_season_running
+        WHERE season_year = ? AND player_id = ? AND is_playoff = ?
+    """, (season_year, player_id, is_playoff)).fetchone()
+
+
+def update_player_season_running_incremental(
+    conn: sqlite3.Connection, running_id: int, week_stats_dict: dict
+) -> None:
+    """
+    Update running totals by incrementing with this week's stats.
+
+    Uses UPDATE SET col = col + ? pattern for atomic incremental updates.
+
+    Args:
+        conn: Database connection
+        running_id: Row ID in player_season_running table
+        week_stats_dict: Dict with this week's stat increments
+    """
+    conn.execute("""
+        UPDATE player_season_running SET
+            games_played = games_played + 1,
+            pass_attempts = pass_attempts + ?,
+            completions = completions + ?,
+            pass_yards = pass_yards + ?,
+            pass_tds = pass_tds + ?,
+            interceptions_thrown = interceptions_thrown + ?,
+            sacks_taken = sacks_taken + ?,
+            carries = carries + ?,
+            rush_yards = rush_yards + ?,
+            rush_tds = rush_tds + ?,
+            fumbles = fumbles + ?,
+            targets = targets + ?,
+            receptions = receptions + ?,
+            rec_yards = rec_yards + ?,
+            rec_tds = rec_tds + ?,
+            tackles = tackles + ?,
+            sacks = sacks + ?,
+            interceptions = interceptions + ?,
+            pass_deflections = pass_deflections + ?,
+            forced_fumbles = forced_fumbles + ?,
+            fg_attempts = fg_attempts + ?,
+            fg_made = fg_made + ?,
+            fg_long = CASE WHEN ? > fg_long THEN ? ELSE fg_long END,
+            xp_attempts = xp_attempts + ?,
+            xp_made = xp_made + ?,
+            punts = punts + ?,
+            punt_yards = punt_yards + ?,
+            punt_returns = punt_returns + ?,
+            punt_return_yards = punt_return_yards + ?,
+            punt_return_tds = punt_return_tds + ?,
+            kick_returns = kick_returns + ?,
+            kick_return_yards = kick_return_yards + ?,
+            kick_return_tds = kick_return_tds + ?
+        WHERE id = ?
+    """, (
+        week_stats_dict.get('pass_attempts', 0), week_stats_dict.get('completions', 0),
+        week_stats_dict.get('pass_yards', 0), week_stats_dict.get('pass_tds', 0),
+        week_stats_dict.get('interceptions_thrown', 0), week_stats_dict.get('sacks_taken', 0),
+        week_stats_dict.get('carries', 0), week_stats_dict.get('rush_yards', 0),
+        week_stats_dict.get('rush_tds', 0), week_stats_dict.get('fumbles', 0),
+        week_stats_dict.get('targets', 0), week_stats_dict.get('receptions', 0),
+        week_stats_dict.get('rec_yards', 0), week_stats_dict.get('rec_tds', 0),
+        week_stats_dict.get('tackles', 0), week_stats_dict.get('sacks', 0.0),
+        week_stats_dict.get('interceptions', 0), week_stats_dict.get('pass_deflections', 0),
+        week_stats_dict.get('forced_fumbles', 0), week_stats_dict.get('fg_attempts', 0),
+        week_stats_dict.get('fg_made', 0),
+        week_stats_dict.get('fg_long', 0), week_stats_dict.get('fg_long', 0),  # for MAX comparison
+        week_stats_dict.get('xp_attempts', 0), week_stats_dict.get('xp_made', 0),
+        week_stats_dict.get('punts', 0), week_stats_dict.get('punt_yards', 0),
+        week_stats_dict.get('punt_returns', 0), week_stats_dict.get('punt_return_yards', 0),
+        week_stats_dict.get('punt_return_tds', 0), week_stats_dict.get('kick_returns', 0),
+        week_stats_dict.get('kick_return_yards', 0), week_stats_dict.get('kick_return_tds', 0),
+        running_id
+    ))
+
+
+def get_season_running_leaders(
+    conn: sqlite3.Connection, season_year: int, stat_column: str,
+    is_playoff: int, limit: int = 10
+) -> list[sqlite3.Row]:
+    """
+    Get top N players for a given stat (leaderboard query).
+
+    Performance-critical: Uses indexes on stat columns.
+
+    Args:
+        conn: Database connection
+        season_year: Season year
+        stat_column: Column name (e.g., 'pass_yards', 'rush_yards')
+        is_playoff: 0 for regular season, 1 for playoffs
+        limit: Number of results to return
+
+    Returns:
+        List of player_season_running rows with player and team info joined
+    """
+    # Validate stat_column to prevent SQL injection
+    from ..utils.constants import STAT_COLUMNS_PLAYER
+    if stat_column not in STAT_COLUMNS_PLAYER:
+        raise ValueError(f"Invalid stat column: {stat_column}")
+
+    query = f"""
+        SELECT psr.*, p.first_name, p.last_name, p.position, t.abbreviation as team_abbr
+        FROM player_season_running psr
+        JOIN player p ON p.id = psr.player_id
+        JOIN team t ON t.id = psr.team_id
+        WHERE psr.season_year = ? AND psr.is_playoff = ?
+        ORDER BY psr.{stat_column} DESC
+        LIMIT ?
+    """
+    return conn.execute(query, (season_year, is_playoff, limit)).fetchall()
+
+
+def get_position_season_running(
+    conn: sqlite3.Connection, season_year: int, position: str, is_playoff: int
+) -> list[sqlite3.Row]:
+    """Get running season stats for all players at a position."""
+    return conn.execute("""
+        SELECT psr.*, p.first_name, p.last_name, p.position
+        FROM player_season_running psr
+        JOIN player p ON p.id = psr.player_id
+        WHERE psr.season_year = ? AND p.position = ? AND psr.is_playoff = ?
+    """, (season_year, position, is_playoff)).fetchall()
+
+
+def verify_season_running_consistency(
+    conn: sqlite3.Connection, season_year: int, player_id: int, is_playoff: int
+) -> dict:
+    """
+    Validation helper: verify running total matches sum of weekly stats.
+
+    Args:
+        conn: Database connection
+        season_year: Season year
+        player_id: Player ID
+        is_playoff: 0 for regular season, 1 for playoffs
+
+    Returns:
+        Dict with 'consistent': bool and details of any mismatches
+    """
+    running = get_player_season_running(conn, season_year, player_id, is_playoff)
+    if not running:
+        return {'consistent': True, 'message': 'No running total found'}
+
+    weekly_sum = conn.execute("""
+        SELECT
+            SUM(pass_yards) as pass_yards, SUM(rush_yards) as rush_yards,
+            SUM(rec_yards) as rec_yards, SUM(tackles) as tackles
+        FROM player_week_stats
+        WHERE season_year = ? AND player_id = ? AND is_playoff = ?
+    """, (season_year, player_id, is_playoff)).fetchone()
+
+    mismatches = []
+    if weekly_sum['pass_yards'] != running['pass_yards']:
+        mismatches.append(f"pass_yards: {running['pass_yards']} != {weekly_sum['pass_yards']}")
+    if weekly_sum['rush_yards'] != running['rush_yards']:
+        mismatches.append(f"rush_yards: {running['rush_yards']} != {weekly_sum['rush_yards']}")
+    if weekly_sum['rec_yards'] != running['rec_yards']:
+        mismatches.append(f"rec_yards: {running['rec_yards']} != {weekly_sum['rec_yards']}")
+    if weekly_sum['tackles'] != running['tackles']:
+        mismatches.append(f"tackles: {running['tackles']} != {weekly_sum['tackles']}")
+
+    return {
+        'consistent': len(mismatches) == 0,
+        'mismatches': mismatches
+    }
+
+
+def delete_player_season_running_for_season(conn: sqlite3.Connection, season_year: int) -> int:
+    """Delete all player season running totals for a season (called at archive)."""
+    cursor = conn.execute("""
+        DELETE FROM player_season_running WHERE season_year = ?
+    """, (season_year,))
+    return cursor.rowcount
+
+
+def archive_running_to_season_stats(conn: sqlite3.Connection, season_year: int) -> int:
+    """
+    Copy player_season_running -> player_season_stats at season end.
+
+    Args:
+        conn: Database connection
+        season_year: Season year to archive
+
+    Returns:
+        Number of rows copied
+    """
+    cursor = conn.execute("""
+        INSERT INTO player_season_stats (
+            player_id, team_id, season_year, games_played,
+            pass_attempts, completions, pass_yards, pass_tds, interceptions_thrown,
+            carries, rush_yards, rush_tds,
+            targets, receptions, rec_yards, rec_tds,
+            tackles, sacks, interceptions, pass_deflections,
+            fg_made, fg_attempts, xp_attempts, xp_made, fg_long,
+            sacks_taken, fumbles, punts, punt_yards,
+            punt_returns, punt_return_yards, punt_return_tds,
+            kick_returns, kick_return_yards, kick_return_tds
+        )
+        SELECT
+            player_id, team_id, season_year, games_played,
+            pass_attempts, completions, pass_yards, pass_tds, interceptions_thrown,
+            carries, rush_yards, rush_tds,
+            targets, receptions, rec_yards, rec_tds,
+            tackles, sacks, interceptions, pass_deflections,
+            fg_made, fg_attempts, xp_attempts, xp_made, fg_long,
+            sacks_taken, fumbles, punts, punt_yards,
+            punt_returns, punt_return_yards, punt_return_tds,
+            kick_returns, kick_return_yards, kick_return_tds
+        FROM player_season_running
+        WHERE season_year = ? AND is_playoff = 0
+    """, (season_year,))
+    return cursor.rowcount
+
+
+# ========== team_week_stats ==========
+
+def insert_team_week_stats(
+    conn: sqlite3.Connection, season_year: int, week_number: int,
+    team_id: int, is_playoff: int, stats_dict: dict
+) -> int:
+    """Insert team week stats snapshot."""
+    cursor = conn.execute("""
+        INSERT INTO team_week_stats (
+            season_year, week_number, team_id, is_playoff,
+            points_scored, total_yards, pass_yards, rush_yards, turnovers,
+            third_down_conversions, third_down_attempts,
+            points_allowed, yards_allowed, sacks_recorded, takeaways, won
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        season_year, week_number, team_id, is_playoff,
+        stats_dict.get('points_scored', 0), stats_dict.get('total_yards', 0),
+        stats_dict.get('pass_yards', 0), stats_dict.get('rush_yards', 0),
+        stats_dict.get('turnovers', 0), stats_dict.get('third_down_conversions', 0),
+        stats_dict.get('third_down_attempts', 0), stats_dict.get('points_allowed', 0),
+        stats_dict.get('yards_allowed', 0), stats_dict.get('sacks_recorded', 0.0),
+        stats_dict.get('takeaways', 0), stats_dict.get('won', 0)
+    ))
+    return cursor.lastrowid
+
+
+def get_team_week_stats(
+    conn: sqlite3.Connection, season_year: int, week_number: int,
+    team_id: int, is_playoff: int
+) -> Optional[sqlite3.Row]:
+    """Get team week stats for a specific week."""
+    return conn.execute("""
+        SELECT * FROM team_week_stats
+        WHERE season_year = ? AND week_number = ? AND team_id = ? AND is_playoff = ?
+    """, (season_year, week_number, team_id, is_playoff)).fetchone()
+
+
+def get_all_team_week_stats(
+    conn: sqlite3.Connection, season_year: int, week_number: int, is_playoff: int
+) -> list[sqlite3.Row]:
+    """Get all team week stats for a specific week."""
+    return conn.execute("""
+        SELECT * FROM team_week_stats
+        WHERE season_year = ? AND week_number = ? AND is_playoff = ?
+    """, (season_year, week_number, is_playoff)).fetchall()
+
+
+def get_team_weekly_history(
+    conn: sqlite3.Connection, team_id: int, season_year: int, is_playoff: int
+) -> list[sqlite3.Row]:
+    """Get week-by-week stats for a team in a season."""
+    return conn.execute("""
+        SELECT * FROM team_week_stats
+        WHERE team_id = ? AND season_year = ? AND is_playoff = ?
+        ORDER BY week_number ASC
+    """, (team_id, season_year, is_playoff)).fetchall()
+
+
+def delete_team_week_stats_for_season(conn: sqlite3.Connection, season_year: int) -> int:
+    """Delete all team week stats for a season (called at archive)."""
+    cursor = conn.execute("""
+        DELETE FROM team_week_stats WHERE season_year = ?
+    """, (season_year,))
+    return cursor.rowcount
+
+
+# ========== team_season_running ==========
+
+def insert_team_season_running(
+    conn: sqlite3.Connection, season_year: int, team_id: int,
+    is_playoff: int, stats_dict: dict
+) -> int:
+    """Insert a new running season total for a team."""
+    cursor = conn.execute("""
+        INSERT INTO team_season_running (
+            season_year, team_id, is_playoff, games_played,
+            points_scored, total_yards, pass_yards, rush_yards, turnovers,
+            third_down_conversions, third_down_attempts,
+            points_allowed, yards_allowed, sacks_recorded, takeaways,
+            wins, losses, ties
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        season_year, team_id, is_playoff, stats_dict.get('games_played', 0),
+        stats_dict.get('points_scored', 0), stats_dict.get('total_yards', 0),
+        stats_dict.get('pass_yards', 0), stats_dict.get('rush_yards', 0),
+        stats_dict.get('turnovers', 0), stats_dict.get('third_down_conversions', 0),
+        stats_dict.get('third_down_attempts', 0), stats_dict.get('points_allowed', 0),
+        stats_dict.get('yards_allowed', 0), stats_dict.get('sacks_recorded', 0.0),
+        stats_dict.get('takeaways', 0), stats_dict.get('wins', 0),
+        stats_dict.get('losses', 0), stats_dict.get('ties', 0)
+    ))
+    return cursor.lastrowid
+
+
+def get_team_season_running(
+    conn: sqlite3.Connection, season_year: int, team_id: int, is_playoff: int
+) -> Optional[sqlite3.Row]:
+    """Get running season stats for a team."""
+    return conn.execute("""
+        SELECT * FROM team_season_running
+        WHERE season_year = ? AND team_id = ? AND is_playoff = ?
+    """, (season_year, team_id, is_playoff)).fetchone()
+
+
+def update_team_season_running_incremental(
+    conn: sqlite3.Connection, running_id: int, week_stats_dict: dict
+) -> None:
+    """
+    Update team running totals by incrementing with this week's stats.
+
+    Args:
+        conn: Database connection
+        running_id: Row ID in team_season_running table
+        week_stats_dict: Dict with this week's stat increments
+    """
+    conn.execute("""
+        UPDATE team_season_running SET
+            games_played = games_played + 1,
+            points_scored = points_scored + ?,
+            total_yards = total_yards + ?,
+            pass_yards = pass_yards + ?,
+            rush_yards = rush_yards + ?,
+            turnovers = turnovers + ?,
+            third_down_conversions = third_down_conversions + ?,
+            third_down_attempts = third_down_attempts + ?,
+            points_allowed = points_allowed + ?,
+            yards_allowed = yards_allowed + ?,
+            sacks_recorded = sacks_recorded + ?,
+            takeaways = takeaways + ?,
+            wins = wins + ?,
+            losses = losses + ?,
+            ties = ties + ?
+        WHERE id = ?
+    """, (
+        week_stats_dict.get('points_scored', 0), week_stats_dict.get('total_yards', 0),
+        week_stats_dict.get('pass_yards', 0), week_stats_dict.get('rush_yards', 0),
+        week_stats_dict.get('turnovers', 0), week_stats_dict.get('third_down_conversions', 0),
+        week_stats_dict.get('third_down_attempts', 0), week_stats_dict.get('points_allowed', 0),
+        week_stats_dict.get('yards_allowed', 0), week_stats_dict.get('sacks_recorded', 0.0),
+        week_stats_dict.get('takeaways', 0), week_stats_dict.get('wins', 0),
+        week_stats_dict.get('losses', 0), week_stats_dict.get('ties', 0),
+        running_id
+    ))
+
+
+def get_team_season_running_leaders(
+    conn: sqlite3.Connection, season_year: int, stat_column: str,
+    is_playoff: int, limit: int = 10
+) -> list[sqlite3.Row]:
+    """Get top N teams for a given stat."""
+    from ..utils.constants import STAT_COLUMNS_TEAM
+    valid_columns = STAT_COLUMNS_TEAM + ['wins', 'losses', 'ties']
+    if stat_column not in valid_columns:
+        raise ValueError(f"Invalid stat column: {stat_column}")
+
+    query = f"""
+        SELECT tsr.*, t.city, t.nickname, t.abbreviation
+        FROM team_season_running tsr
+        JOIN team t ON t.id = tsr.team_id
+        WHERE tsr.season_year = ? AND tsr.is_playoff = ?
+        ORDER BY tsr.{stat_column} DESC
+        LIMIT ?
+    """
+    return conn.execute(query, (season_year, is_playoff, limit)).fetchall()
+
+
+def delete_team_season_running_for_season(conn: sqlite3.Connection, season_year: int) -> int:
+    """Delete all team season running totals for a season (called at archive)."""
+    cursor = conn.execute("""
+        DELETE FROM team_season_running WHERE season_year = ?
+    """, (season_year,))
+    return cursor.rowcount
+
+
+# ========== weekly_award ==========
+
+def insert_weekly_award(
+    conn: sqlite3.Connection, season_year: int, week_number: int,
+    is_playoff: int, award_type: str, player_id: int, team_id: int,
+    score: float, narrative: str
+) -> int:
+    """Insert a weekly award (Star of the Week)."""
+    cursor = conn.execute("""
+        INSERT INTO weekly_award (
+            season_year, week_number, is_playoff, award_type,
+            player_id, team_id, score, narrative_blurb
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (season_year, week_number, is_playoff, award_type, player_id, team_id, score, narrative))
+    return cursor.lastrowid
+
+
+def get_weekly_awards(
+    conn: sqlite3.Connection, season_year: int, week_number: int, is_playoff: int
+) -> list[sqlite3.Row]:
+    """Get all weekly awards for a specific week."""
+    return conn.execute("""
+        SELECT wa.*, p.first_name, p.last_name, p.position, t.abbreviation as team_abbr
+        FROM weekly_award wa
+        JOIN player p ON p.id = wa.player_id
+        JOIN team t ON t.id = wa.team_id
+        WHERE wa.season_year = ? AND wa.week_number = ? AND wa.is_playoff = ?
+        ORDER BY wa.award_type
+    """, (season_year, week_number, is_playoff)).fetchall()
+
+
+def get_weekly_award_by_type(
+    conn: sqlite3.Connection, season_year: int, week_number: int,
+    is_playoff: int, award_type: str
+) -> Optional[sqlite3.Row]:
+    """Get a specific weekly award by type."""
+    return conn.execute("""
+        SELECT wa.*, p.first_name, p.last_name, p.position, t.abbreviation as team_abbr
+        FROM weekly_award wa
+        JOIN player p ON p.id = wa.player_id
+        JOIN team t ON t.id = wa.team_id
+        WHERE wa.season_year = ? AND wa.week_number = ? AND wa.is_playoff = ? AND wa.award_type = ?
+    """, (season_year, week_number, is_playoff, award_type)).fetchone()
+
+
+def get_player_weekly_awards_count(
+    conn: sqlite3.Connection, player_id: int, season_year: int
+) -> int:
+    """Count how many weekly awards a player has won in a season."""
+    result = conn.execute("""
+        SELECT COUNT(*) as count FROM weekly_award
+        WHERE player_id = ? AND season_year = ?
+    """, (player_id, season_year)).fetchone()
+    return result['count']
+
+
+def get_all_weekly_awards_for_season(
+    conn: sqlite3.Connection, season_year: int, is_playoff: int
+) -> list[sqlite3.Row]:
+    """Get all weekly awards for a season."""
+    return conn.execute("""
+        SELECT wa.*, p.first_name, p.last_name, p.position, t.abbreviation as team_abbr
+        FROM weekly_award wa
+        JOIN player p ON p.id = wa.player_id
+        JOIN team t ON t.id = wa.team_id
+        WHERE wa.season_year = ? AND wa.is_playoff = ?
+        ORDER BY wa.week_number, wa.award_type
+    """, (season_year, is_playoff)).fetchall()
+
+
+def get_user_team_mvp_history(
+    conn: sqlite3.Connection, user_team_id: int, season_year: int
+) -> list[sqlite3.Row]:
+    """Get all USER_TEAM_MVP awards for user's team in a season."""
+    return conn.execute("""
+        SELECT wa.*, p.first_name, p.last_name, p.position
+        FROM weekly_award wa
+        JOIN player p ON p.id = wa.player_id
+        WHERE wa.team_id = ? AND wa.season_year = ? AND wa.award_type = 'USER_TEAM_MVP'
+        ORDER BY wa.week_number
+    """, (user_team_id, season_year)).fetchall()
+
+
+def delete_weekly_awards_for_season(conn: sqlite3.Connection, season_year: int) -> int:
+    """Delete all weekly awards for a season (NOT called at archive - kept permanent)."""
+    cursor = conn.execute("""
+        DELETE FROM weekly_award WHERE season_year = ?
+    """, (season_year,))
+    return cursor.rowcount

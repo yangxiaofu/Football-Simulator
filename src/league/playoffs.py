@@ -118,6 +118,11 @@ def simulate_playoff_round(
             conn,
             get_week(conn, season_year, week_number)['id'],
         )
+
+        # Aggregate weekly stats (Phase 5) - playoffs use is_playoff=True
+        from ..league.weekly_stats import aggregate_week_stats
+        aggregate_week_stats(conn, season_year, week_number, is_playoff=True)
+
         heal_injured_players(conn)
         reset_weekly_stamina(conn)
 
