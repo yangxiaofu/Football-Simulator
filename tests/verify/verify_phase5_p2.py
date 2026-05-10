@@ -34,7 +34,7 @@ def check_cli_runs(save_path):
 
     commands = [
         ['python', 'view_stats.py', save_path, '--leaderboard', 'passing'],
-        ['python', 'view_stats.py', save_path, '--leaderboard', 'rushing', '--limit', '25'],
+        ['python', 'view_stats.py', save_path, '--leaderboard', 'rushing', '--top', '25'],
         ['python', 'view_stats.py', save_path, '--player', '1'],
         ['python', 'view_stats.py', save_path, '--team', 'CHI'],
         ['python', 'view_stats.py', save_path, '--week', '1'],
@@ -155,6 +155,135 @@ def check_stars_placeholder(save_path):
         return False
 
 
+def check_no_scope_creep_into_run_season(save_path):
+    """Check 6: Verify run_season.py was NOT modified to add view_stats flags.
+    Those flags belong on view_stats.py only."""
+    print("\n[Check 6] No scope creep into run_season.py...")
+
+    with open("run_season.py") as f:
+        runs_src = f.read()
+
+    forbidden_flags = ["--leaderboard", "--stars-of-week", "--player-weekly"]
+    found = [f for f in forbidden_flags if f in runs_src]
+
+    if found:
+        print(f"  ✗ run_season.py contains view_stats flags: {found}")
+        print(f"    These belong on view_stats.py only.")
+        return False
+
+    print(f"  ✓ run_season.py is clean (no view_stats flags)")
+    return True
+
+
+def check_phase4_stress_harness(save_path):
+    """Check 7: Verify Phase 4 stress harness still passes with Phase 5 active."""
+    print("\n[Check 7] Phase 4 stress harness regression check...")
+
+    result = subprocess.run(
+        ['python', 'run_stress_test.py', save_path, '--seasons', '1', '--invariants'],
+        capture_output=True,
+        text=True,
+        timeout=300  # 5 minutes max
+    )
+
+    if result.returncode != 0:
+        print(f"  ✗ Stress harness exited {result.returncode}")
+        print(f"    STDERR tail: {result.stderr[-500:]}")
+        return False
+
+    print(f"  ✓ All 12 invariants pass over 1 season")
+    return True
+
+
+def check_layer_boundaries():
+    """Check 8: Verify src/ui/stats_view.py contains no SQL (layer boundary)."""
+    print("\n[Check 8] Layer boundary scan...")
+
+    with open("src/ui/stats_view.py") as f:
+        lines = f.readlines()
+
+    # More specific SQL patterns that are less likely to be English text
+    forbidden_patterns = ["conn.execute(", "cursor.execute(", ".fetchall(", ".fetchone()",
+                          "select * from", "insert into", "update set", "delete from"]
+
+    problematic = []
+    in_docstring = False
+    docstring_char = None
+
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip().lower()
+
+        # Track docstring state more carefully
+        if '"""' in line:
+            if not in_docstring:
+                in_docstring = True
+                docstring_char = '"""'
+                # Check if docstring ends on same line
+                if line.count('"""') >= 2:
+                    in_docstring = False
+                continue
+            elif docstring_char == '"""':
+                in_docstring = False
+                docstring_char = None
+                continue
+
+        if "'''" in line:
+            if not in_docstring:
+                in_docstring = True
+                docstring_char = "'''"
+                # Check if docstring ends on same line
+                if line.count("'''") >= 2:
+                    in_docstring = False
+                continue
+            elif docstring_char == "'''":
+                in_docstring = False
+                docstring_char = None
+                continue
+
+        # Skip lines inside docstrings or comments
+        if in_docstring or stripped.startswith("#"):
+            continue
+
+        # Check for SQL patterns
+        for pattern in forbidden_patterns:
+            if pattern in stripped:
+                problematic.append((pattern, i, line[:80]))
+
+    if problematic:
+        print(f"  ✗ SQL execution found in non-comment code:")
+        for pattern, lineno, line in problematic[:5]:
+            print(f"    Line {lineno}: [{pattern}] {line.strip()[:60]}")
+        return False
+
+    print(f"  ✓ src/ui/stats_view.py contains no SQL execution")
+    return True
+
+
+def check_unknown_stat_errors_cleanly(save_path):
+    """Check 9: Verify --leaderboard with unknown category exits non-zero
+    and prints supported categories."""
+    print("\n[Check 9] Unknown leaderboard category errors cleanly...")
+
+    result = subprocess.run(
+        ['python', 'view_stats.py', save_path, '--leaderboard', 'bogus_xyz'],
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode == 0:
+        print(f"  ✗ Unknown category should exit non-zero, got 0")
+        return False
+
+    combined = (result.stdout + result.stderr).lower()
+    if "valid" not in combined and "supported" not in combined and "passing" not in combined:
+        print(f"  ✗ Error output did not list valid categories")
+        print(f"    Output: {result.stdout[:200]}")
+        return False
+
+    print(f"  ✓ Unknown category exits non-zero with category list")
+    return True
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: python tests/verify/verify_phase5_p2.py saves/test.db")
@@ -177,6 +306,10 @@ def main():
         check_player_history(conn, season_year),
         check_team_stats(conn, season_year),
         check_stars_placeholder(save_path),
+        check_no_scope_creep_into_run_season(save_path),
+        check_phase4_stress_harness(save_path),
+        check_layer_boundaries(),
+        check_unknown_stat_errors_cleanly(save_path),
     ]
 
     print("\n" + "=" * 70)

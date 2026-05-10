@@ -303,6 +303,31 @@ Goal: Coach identity as a first-class entity, portable careers, media/pressure s
 
 ---
 
+**Phase 5 — In-Season Stats & Media** (In Progress)
+
+Goal: Weekly stat aggregation, leaderboards, Stars of the Week, and enhanced media system.
+
+### Phase 5 Checklist
+- [x] **Prompt #1**: Stats Schema & Weekly Aggregation
+  - 5 new tables (`player_week_stats`, `player_season_running`, `team_week_stats`, `team_season_running`, `weekly_award`)
+  - 33 CRUD query functions in `src/db/queries.py`
+  - `src/league/weekly_stats.py` (idempotent recompute-from-SUM aggregation)
+  - Integration with `season.py` (aggregate after each week)
+  - Verification: `python tests/verify/verify_phase5_p1.py`
+- [x] **Prompt #2**: View Stats CLI
+  - `view_stats.py` CLI + queries (`--leaderboard {passing|rushing|receiving|defense|sacks|interceptions}` with `--top N` and `--week N | --through-week N`; `--player`, `--team`, `--week`, `--stars`)
+  - Display via `src/ui/stats_view.py` (pure presentation, no SQL)
+  - NFL-style leaderboard qualifiers (14 att/game passing, 6.25 car/game rushing)
+  - `--stars` shows empty-state message until Prompt #4
+  - Verification: `python tests/verify/verify_phase5_p2.py` (9 checks including scope-creep guard, Phase 4 regression, layer boundary scan)
+- [ ] **Prompt #3**: TBD
+- [ ] **Prompt #4**: Stars of the Week Selection Algorithm
+- [ ] **Prompt #5**: TBD
+
+**Phase 5 In Progress...**
+
+---
+
 ## Key Design Decisions (Do Not Change Without Updating the GDD)
 
 These decisions are load-bearing — changing them has cascade effects across multiple systems.

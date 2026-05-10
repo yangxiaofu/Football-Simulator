@@ -9,6 +9,8 @@ from typing import Optional
 
 from ..db.queries import (
     get_season_running_leaders,
+    get_leaderboard_through_week,
+    get_leaderboard_single_week,
     get_player_weekly_history,
     get_player,
     get_team,
@@ -31,7 +33,9 @@ def print_leaderboard(
     conn: sqlite3.Connection,
     season_year: int,
     category: str,
-    limit: int = 10
+    limit: int = 10,
+    through_week: Optional[int] = None,
+    single_week: Optional[int] = None
 ) -> None:
     """
     Display top N players in a stat category with NFL-style qualifiers.
@@ -41,17 +45,32 @@ def print_leaderboard(
         season_year: Season year
         category: Category key from LEADERBOARD_STAT_MAP (e.g., 'passing', 'rushing')
         limit: Number of players to display (default 10)
+        through_week: Show stats through this week (SUM weeks 1-N)
+        single_week: Show stats for only this week
     """
     stat_column = LEADERBOARD_STAT_MAP[category]
 
-    # Over-fetch to account for filtered players
-    raw_leaders = get_season_running_leaders(
-        conn, season_year, stat_column, is_playoff=0, limit=limit * 2
-    )
+    # Choose query function based on week filter
+    if through_week:
+        raw_leaders = get_leaderboard_through_week(
+            conn, season_year, stat_column, through_week, is_playoff=0, limit=limit * 2
+        )
+        scope_desc = f"Through Week {through_week}"
+    elif single_week:
+        raw_leaders = get_leaderboard_single_week(
+            conn, season_year, stat_column, single_week, is_playoff=0, limit=limit * 2
+        )
+        scope_desc = f"Week {single_week}"
+    else:
+        # Over-fetch to account for filtered players
+        raw_leaders = get_season_running_leaders(
+            conn, season_year, stat_column, is_playoff=0, limit=limit * 2
+        )
+        scope_desc = "Season-to-Date"
 
     if not raw_leaders:
         print("=" * 70)
-        print(f"IN-SEASON LEADERBOARD — {category.upper()} ({season_year} Regular Season)")
+        print(f"IN-SEASON LEADERBOARD — {category.upper()} ({season_year} {scope_desc})")
         print("=" * 70)
         print("  No data available yet.")
         return
@@ -90,7 +109,7 @@ def print_leaderboard(
 
     # Print header
     print("=" * 70)
-    print(f"IN-SEASON LEADERBOARD — {category.upper()} ({season_year} Regular Season)")
+    print(f"IN-SEASON LEADERBOARD — {category.upper()} ({season_year} {scope_desc})")
     print("=" * 70)
 
     # Print table based on category

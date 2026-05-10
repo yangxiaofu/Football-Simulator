@@ -3724,6 +3724,103 @@ def get_season_running_leaders(
     return conn.execute(query, (season_year, is_playoff, limit)).fetchall()
 
 
+def get_leaderboard_through_week(
+    conn: sqlite3.Connection, season_year: int, stat_column: str,
+    through_week: int, is_playoff: int = 0, limit: int = 10
+) -> list[sqlite3.Row]:
+    """
+    Sum player_week_stats from week 1 through `through_week` and return top N by `stat_column`.
+
+    Returns same row shape as get_season_running_leaders for UI compatibility.
+
+    Args:
+        conn: Database connection
+        season_year: Season year
+        stat_column: Column name (e.g., 'pass_yards', 'rush_yards')
+        through_week: Maximum week number to include
+        is_playoff: 0 for regular season, 1 for playoffs
+        limit: Number of results to return
+
+    Returns:
+        List of aggregated player stats with player and team info joined
+    """
+    # Validate stat_column to prevent SQL injection
+    from ..utils.constants import STAT_COLUMNS_PLAYER
+    if stat_column not in STAT_COLUMNS_PLAYER:
+        raise ValueError(f"Invalid stat column: {stat_column}")
+
+    # Build SUM clauses for all stat columns
+    sum_clauses = ', '.join([f'SUM(pws.{col}) as {col}' for col in STAT_COLUMNS_PLAYER])
+
+    query = f"""
+        SELECT
+            pws.player_id,
+            pws.team_id,
+            COUNT(*) as games_played,
+            {sum_clauses},
+            p.first_name,
+            p.last_name,
+            p.position,
+            t.abbreviation as team_abbr
+        FROM player_week_stats pws
+        JOIN player p ON p.id = pws.player_id
+        JOIN team t ON t.id = pws.team_id
+        WHERE pws.season_year = ?
+          AND pws.week_number <= ?
+          AND pws.is_playoff = ?
+        GROUP BY pws.player_id, pws.team_id
+        ORDER BY {stat_column} DESC
+        LIMIT ?
+    """
+    return conn.execute(query, (season_year, through_week, is_playoff, limit)).fetchall()
+
+
+def get_leaderboard_single_week(
+    conn: sqlite3.Connection, season_year: int, stat_column: str,
+    week_number: int, is_playoff: int = 0, limit: int = 10
+) -> list[sqlite3.Row]:
+    """
+    Read player_week_stats for a single week and return top N by stat_column.
+
+    Returns same row shape as get_season_running_leaders for UI compatibility.
+
+    Args:
+        conn: Database connection
+        season_year: Season year
+        stat_column: Column name (e.g., 'pass_yards', 'rush_yards')
+        week_number: Specific week number
+        is_playoff: 0 for regular season, 1 for playoffs
+        limit: Number of results to return
+
+    Returns:
+        List of player week stats with player and team info joined
+    """
+    # Validate stat_column to prevent SQL injection
+    from ..utils.constants import STAT_COLUMNS_PLAYER
+    if stat_column not in STAT_COLUMNS_PLAYER:
+        raise ValueError(f"Invalid stat column: {stat_column}")
+
+    # Add games_played=1 for compatibility with UI that expects this column
+    query = f"""
+        SELECT
+            pws.*,
+            1 as games_played,
+            p.first_name,
+            p.last_name,
+            p.position,
+            t.abbreviation as team_abbr
+        FROM player_week_stats pws
+        JOIN player p ON p.id = pws.player_id
+        JOIN team t ON t.id = pws.team_id
+        WHERE pws.season_year = ?
+          AND pws.week_number = ?
+          AND pws.is_playoff = ?
+        ORDER BY pws.{stat_column} DESC
+        LIMIT ?
+    """
+    return conn.execute(query, (season_year, week_number, is_playoff, limit)).fetchall()
+
+
 def get_position_season_running(
     conn: sqlite3.Connection, season_year: int, position: str, is_playoff: int
 ) -> list[sqlite3.Row]:

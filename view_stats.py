@@ -2,7 +2,7 @@
 
 Usage:
     python view_stats.py saves/test.db --leaderboard passing          # top 10 passers
-    python view_stats.py saves/test.db --leaderboard rushing --limit 25  # top 25 rushers
+    python view_stats.py saves/test.db --leaderboard rushing --top 25  # top 25 rushers
     python view_stats.py saves/test.db --player 123                   # player weekly history
     python view_stats.py saves/test.db --team CHI                     # team season stats
     python view_stats.py saves/test.db --week 5                       # Week 5 top performers
@@ -33,18 +33,23 @@ def main():
                         help='Show player week-by-week history')
     parser.add_argument('--team', metavar='TEAM_ABBR',
                         help='Show team season stats (e.g., CHI, DAL, GB)')
-    parser.add_argument('--week', metavar='WEEK_NUMBER', type=int,
-                        help='Show all stats from specific week')
     parser.add_argument('--stars', action='store_true',
                         help='Show Stars of the Week (placeholder)')
-    parser.add_argument('--limit', type=int, default=10,
+    parser.add_argument('--top', type=int, default=10,
                         help='Number of players to show in leaderboards (default: 10, max: 50)')
+
+    # Week filters for leaderboard OR week recap subcommand
+    week_group = parser.add_mutually_exclusive_group()
+    week_group.add_argument('--week', metavar='WEEK_NUMBER', type=int,
+                            help='Show stats from a specific week (leaderboard filter) OR week recap (subcommand)')
+    week_group.add_argument('--through-week', dest='through_week', metavar='WEEK_NUMBER', type=int,
+                            help='Show season-to-date totals through week N (leaderboard only)')
 
     args = parser.parse_args()
 
-    # Validate limit
-    if args.limit > LEADERBOARD_MAX_LIMIT:
-        print(f"Error: Limit cannot exceed {LEADERBOARD_MAX_LIMIT}")
+    # Validate top
+    if args.top > LEADERBOARD_MAX_LIMIT:
+        print(f"Error: Top cannot exceed {LEADERBOARD_MAX_LIMIT}")
         sys.exit(1)
 
     conn = get_connection(args.db_path)
@@ -57,7 +62,17 @@ def main():
             print(f"Error: Unknown category '{args.leaderboard}'")
             print(f"Valid categories: {', '.join(sorted(LEADERBOARD_STAT_MAP.keys()))}")
             sys.exit(1)
-        print_leaderboard(conn, season_year, args.leaderboard, args.limit)
+
+        # Leaderboard with optional week filters
+        if args.through_week:
+            print_leaderboard(conn, season_year, args.leaderboard, args.top,
+                              through_week=args.through_week)
+        elif args.week:
+            # When --leaderboard is set, --week filters the leaderboard to that week
+            print_leaderboard(conn, season_year, args.leaderboard, args.top,
+                              single_week=args.week)
+        else:
+            print_leaderboard(conn, season_year, args.leaderboard, args.top)
 
     elif args.player:
         print_player_weekly_history(conn, args.player, season_year)
@@ -66,6 +81,7 @@ def main():
         print_team_season_stats(conn, args.team.upper(), season_year)
 
     elif args.week:
+        # Week recap subcommand (no --leaderboard)
         print_week_stats(conn, season_year, args.week)
 
     elif args.stars:
