@@ -1,0 +1,23 @@
+# Football Simulator - Python Dependencies
+#
+# Phase 0: No external dependencies
+# Uses Python 3.11+ standard library only (sqlite3, random, json, etc.)
+#
+# Future dependencies will be added as needed in later phases:
+#
+# Phase 1+ (Simulation Engine):
+# numpy>=1.24.0              # Advanced statistical calculations
+#
+# Phase 2+ (UI):
+# click>=8.0.0               # Better CLI interface
+# rich>=13.0.0               # Terminal formatting and progress bars
+#
+# Testing:
+# pytest>=7.4.0              # Unit testing framework
+# pytest-cov>=4.1.0          # Coverage reporting
+#
+# Development:
+# black>=23.0.0              # Code formatting
+# ruff>=0.1.0                # Fast linting
+
+# Keep this file even when empty to document zero-dependency design
