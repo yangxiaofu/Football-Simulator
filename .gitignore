@@ -30,6 +30,9 @@ saves/*.db-journal
 # Keep saves directory but ignore contents
 !saves/.gitkeep
 
+# Planning / strategy docs (not code)
+planning/
+
 # OS
 .DS_Store
 Thumbs.db

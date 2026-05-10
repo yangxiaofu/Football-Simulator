@@ -45,6 +45,8 @@ def get_connection(save_path: str) -> sqlite3.Connection:
     ensure_coach_legacy_tables(conn)
     ensure_league_record_table(conn)
     ensure_press_tables(conn)
+    ensure_tier2_press_tables(conn)
+    ensure_narrative_moment_table(conn)
 
     return conn
 
@@ -911,6 +913,99 @@ def ensure_press_tables(conn: sqlite3.Connection) -> None:
     except sqlite3.OperationalError:
         pass  # Column already exists
 
+    conn.commit()
+
+
+def ensure_tier2_press_tables(conn: sqlite3.Connection) -> None:
+    """
+    Create Tier 2 dramatic press conference tables if they don't exist.
+
+    Safe to call multiple times. Used for migrating existing save files
+    that were created before the Tier 2 press conference system was added (Phase 4 Prompt #6).
+
+    Args:
+        conn: Database connection
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS tier2_press_event (
+            id                  INTEGER PRIMARY KEY,
+            season_year         INTEGER NOT NULL,
+            week_number         INTEGER NOT NULL,
+            team_id             INTEGER NOT NULL,
+            coach_id            INTEGER NOT NULL,
+            trigger_type        TEXT NOT NULL,
+            template_id         TEXT NOT NULL,
+            num_questions       INTEGER NOT NULL,
+            resolved_at         TEXT,
+            created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (team_id) REFERENCES team(id),
+            FOREIGN KEY (coach_id) REFERENCES coach_career(id)
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_tier2_press_event_team
+        ON tier2_press_event(team_id, season_year)
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS tier2_press_response (
+            id                  INTEGER PRIMARY KEY,
+            event_id            INTEGER NOT NULL,
+            question_index      INTEGER NOT NULL,
+            question_text       TEXT NOT NULL,
+            selected_response   TEXT,
+            delta_owner         INTEGER NOT NULL DEFAULT 0,
+            delta_fan           INTEGER NOT NULL DEFAULT 0,
+            delta_locker_room   INTEGER NOT NULL DEFAULT 0,
+            resolved_at         TEXT,
+            FOREIGN KEY (event_id) REFERENCES tier2_press_event(id)
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_tier2_press_response_event
+        ON tier2_press_response(event_id)
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS tier2_trigger_guard (
+            id              INTEGER PRIMARY KEY,
+            team_id         INTEGER NOT NULL,
+            season_year     INTEGER NOT NULL,
+            trigger_type    TEXT NOT NULL,
+            guard_key       TEXT NOT NULL,
+            fired_week      INTEGER NOT NULL,
+            created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (team_id) REFERENCES team(id),
+            UNIQUE(team_id, season_year, trigger_type, guard_key)
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_tier2_trigger_guard_team
+        ON tier2_trigger_guard(team_id, season_year)
+    """)
+
+    conn.commit()
+
+
+def ensure_narrative_moment_table(conn: sqlite3.Connection) -> None:
+    """
+    Create narrative_moment_shown table for Prompt #9.
+
+    Safe to call multiple times. Used for migrating existing save files
+    that were created before the display layer was added (Phase 4 Prompt #9).
+
+    Args:
+        conn: Database connection
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS narrative_moment_shown (
+            coach_id        INTEGER NOT NULL,
+            moment_type     TEXT NOT NULL,
+            shown_season    INTEGER NOT NULL,
+            PRIMARY KEY (coach_id, moment_type),
+            FOREIGN KEY (coach_id) REFERENCES coach_career(id)
+        )
+    """)
     conn.commit()
 
 

@@ -104,13 +104,25 @@ def run_stress_test(
                 advance_week(conn, db_path)
 
                 # Generate press conference for player coach (headless auto-resolve)
+                # Try Tier 2 first, then Tier 1 fallback
+                from src.transactions.tier2_press_conference import generate_tier2_press_event
                 from src.transactions.press_conference import generate_weekly_press_event
                 player_coach_row = conn.execute("""
                     SELECT id, current_team_id FROM coach_career
                     WHERE is_player = 1 AND is_active = 1
                 """).fetchone()
 
+                tier2_fired = False
                 if player_coach_row and player_coach_row['current_team_id']:
+                    tier2 = generate_tier2_press_event(
+                        conn, season_year, wk + 1,
+                        player_coach_row['current_team_id'], player_coach_row['id'],
+                        headless=True
+                    )
+                    tier2_fired = (tier2 is not None)
+
+                # Tier 1 only if Tier 2 did NOT fire
+                if not tier2_fired and player_coach_row and player_coach_row['current_team_id']:
                     generate_weekly_press_event(
                         conn, season_year, wk + 1,
                         player_coach_row['current_team_id'], player_coach_row['id'],
@@ -126,6 +138,15 @@ def run_stress_test(
 
             with redirect_stdout(io.StringIO()):
                 champion_id = run_full_playoffs(conn, db_path, season_year)
+
+            # Post-playoff Tier 2 triggers (championship_won, playoff_loss)
+            if player_coach_row and player_coach_row['current_team_id']:
+                for pw in range(18, 22):
+                    generate_tier2_press_event(
+                        conn, season_year, pw,
+                        player_coach_row['current_team_id'], player_coach_row['id'],
+                        headless=True
+                    )
 
             if print_progress:
                 print(" done")

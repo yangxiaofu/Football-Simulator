@@ -94,20 +94,71 @@ def cmd_advance_week(conn, save_path):
     if result['healed_count'] > 0:
         print(f"  {result['healed_count']} player(s) recovered from injury")
 
-    # Weekly press conference (regular season only)
-    if week_num <= REGULAR_SEASON_WEEKS:
-        from src.transactions.press_conference import (
-            generate_weekly_press_event,
-            resolve_press_event,
-            set_autopilot_default
+    # Weekly press conference (Tier 2-first, then Tier 1 fallback)
+    player_coach = conn.execute("""
+        SELECT id, current_team_id FROM coach_career
+        WHERE is_player = 1 AND is_active = 1
+    """).fetchone()
+
+    if player_coach and player_coach['current_team_id']:
+        from src.transactions.tier2_press_conference import generate_tier2_press_event
+
+        # Try Tier 2 first (fires for reg season + playoffs)
+        tier2 = generate_tier2_press_event(
+            conn, season_year, week_num,
+            player_coach['current_team_id'], player_coach['id'],
+            headless=False
         )
 
-        player_coach = conn.execute("""
-            SELECT id, current_team_id FROM coach_career
-            WHERE is_player = 1 AND is_active = 1
-        """).fetchone()
+        if tier2 and not tier2['resolved']:
+            # Render multi-question dramatic press (NO autopilot)
+            print("\n" + "=" * 70)
+            print(f"*** PRESS CONFERENCE — Week {week_num} ***")
+            print(f"[{tier2['trigger_type'].upper().replace('_', ' ')}]")
+            print("=" * 70)
 
-        if player_coach and player_coach['current_team_id']:
+            total_owner = 0
+            total_fan = 0
+            total_locker = 0
+
+            for q in tier2['questions']:
+                print(f"\nReporter: \"{q['question']}\"")
+                print()
+                choices_list = list(q['responses'].items())
+                for i, (choice_key, text) in enumerate(choices_list, 1):
+                    print(f"  {i}. [{choice_key.upper():<15}] \"{text}\"")
+                print()
+
+                raw = input("Choice (1-3): ").strip().lower()
+                try:
+                    idx = int(raw) - 1
+                    choice = choices_list[idx][0]
+                except (ValueError, IndexError):
+                    print("Invalid input — defaulting to 'accountable'.")
+                    choice = 'accountable'
+
+                from src.transactions.tier2_press_conference import resolve_tier2_question
+                with conn:
+                    result = resolve_tier2_question(conn, q['response_id'], choice)
+                total_owner += result['delta_owner']
+                total_fan += result['delta_fan']
+                total_locker += result['delta_locker_room']
+
+            print(f"\n  Total effects → Owner: {total_owner:+d}, Fan: {total_fan:+d}, "
+                  f"Locker: {total_locker:+d}")
+
+        elif tier2 and tier2['resolved']:
+            # Already resolved (shouldn't normally happen in interactive)
+            print(f"\n[Tier 2 press already resolved for this week]")
+
+        elif week_num <= REGULAR_SEASON_WEEKS:
+            # No Tier 2 — fall through to Tier 1 (regular season only)
+            from src.transactions.press_conference import (
+                generate_weekly_press_event,
+                resolve_press_event,
+                set_autopilot_default
+            )
+
             event = generate_weekly_press_event(
                 conn, season_year, week_num,
                 player_coach['current_team_id'], player_coach['id'],
@@ -206,6 +257,46 @@ def cmd_simulate_playoffs(conn, save_path):
     print("=" * 50)
 
     champion_id = run_full_playoffs(conn, save_path, season_year)
+
+    # Post-playoff Tier 2 check (championship_won, playoff_loss)
+    player_coach = conn.execute("""
+        SELECT id, current_team_id FROM coach_career
+        WHERE is_player = 1 AND is_active = 1
+    """).fetchone()
+
+    if player_coach and player_coach['current_team_id']:
+        from src.transactions.tier2_press_conference import (
+            generate_tier2_press_event, resolve_tier2_question
+        )
+        for pw in range(18, 22):
+            tier2 = generate_tier2_press_event(
+                conn, season_year, pw,
+                player_coach['current_team_id'], player_coach['id'],
+                headless=False
+            )
+            if tier2 and not tier2['resolved']:
+                print("\n" + "=" * 70)
+                print(f"*** PRESS CONFERENCE — Playoff Week {pw} ***")
+                print(f"[{tier2['trigger_type'].upper().replace('_', ' ')}]")
+                print("=" * 70)
+
+                for q in tier2['questions']:
+                    print(f"\nReporter: \"{q['question']}\"")
+                    print()
+                    choices_list = list(q['responses'].items())
+                    for i, (choice_key, text) in enumerate(choices_list, 1):
+                        print(f"  {i}. [{choice_key.upper():<15}] \"{text}\"")
+                    print()
+
+                    raw = input("Choice (1-3): ").strip().lower()
+                    try:
+                        idx = int(raw) - 1
+                        choice = choices_list[idx][0]
+                    except (ValueError, IndexError):
+                        choice = 'accountable'
+
+                    with conn:
+                        resolve_tier2_question(conn, q['response_id'], choice)
 
     print(f"\n{'='*50}")
 
@@ -310,11 +401,42 @@ def cmd_complete_season(conn, save_path):
     print(f"\n  Legacy Score...")
     with conn:
         legacy = update_legacy_score(conn, season_year, league['user_team_id'])
-    print(f"    Total Legacy Score: {legacy['total_legacy_score']}")
-    print(f"    Championships: {legacy['championships']}")
-    print(f"    Career Win %: {legacy['career_win_pct']:.3f}")
-    if legacy['is_dynasty']:
-        print(f"    DYNASTY STATUS ACHIEVED!")
+
+    # Phase 4 Prompt #9: Display layer integration
+    from src.ui.season_summary import render_season_summary
+    from src.ui.dramatic_moments import maybe_render_dynasty_moment, maybe_render_hof_moment
+
+    player_coach = conn.execute("""
+        SELECT id FROM coach_career
+        WHERE is_player = 1 AND is_active = 1
+    """).fetchone()
+
+    if player_coach:
+        coach_id = player_coach['id']
+
+        # Dramatic moments first (rare, deserve spotlight)
+        dynasty_screen = maybe_render_dynasty_moment(conn, season_year, coach_id, use_color=True)
+        if dynasty_screen:
+            print('\n')
+            print(dynasty_screen)
+            input()  # pause for player
+
+        hof_screen = maybe_render_hof_moment(conn, season_year, coach_id, use_color=True)
+        if hof_screen:
+            print('\n')
+            print(hof_screen)
+            input()
+
+        # Then standard season summary
+        print('\n')
+        print(render_season_summary(conn, season_year, coach_id, use_color=True))
+    else:
+        # Fallback to old display if no player coach (shouldn't happen)
+        print(f"    Total Legacy Score: {legacy['total_legacy_score']}")
+        print(f"    Championships: {legacy['championships']}")
+        print(f"    Career Win %: {legacy['career_win_pct']:.3f}")
+        if legacy['is_dynasty']:
+            print(f"    DYNASTY STATUS ACHIEVED!")
 
     # Prepare for next season
     next_season = season_year + 1

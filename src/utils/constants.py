@@ -1904,6 +1904,35 @@ PRESS_LOCKER_ROOM_TOP_N_PLAYERS = 10  # MVP simplification
 
 
 # ==============================
+# TIER 2 DRAMATIC PRESS CONFERENCE (Phase 4 Prompt #6)
+# ==============================
+
+TIER2_MAX_PER_SEASON = 8
+TIER2_HEADLESS_FALLBACK = 'accountable'
+TIER2_VALID_CHOICES = ('deflect', 'accountable', 'confrontational')
+
+TIER2_EFFECTS = {
+    'deflect':         {'owner': -3, 'fan': -3, 'locker_room': +2},
+    'accountable':     {'owner': +4, 'fan': +4, 'locker_room': +1},
+    'confrontational': {'owner': -5, 'fan': +5, 'locker_room': -3},
+}
+
+TIER2_STAR_RATING_THRESHOLD = 88
+TIER2_LOSING_STREAK_GAMES = 3
+
+TIER2_TRIGGER_PRIORITY = (
+    'championship_won',
+    'dynasty_milestone',
+    'playoff_loss',
+    'star_injury',
+    'blockbuster_trade',
+    'blown_lead',
+    'holdout_public',
+    'losing_streak_3',
+)
+
+
+# ==============================
 # STRESS HARNESS (Phase 4)
 # ==============================
 STRESS_TEST_DEFAULT_SEASONS = 3
@@ -2006,3 +2035,32 @@ TEAM_RECORD_CATEGORIES = {
 # === Display config ===
 CHAMPION_HISTORY_DEFAULT_LIMIT = 25
 ALL_TIME_LEADERS_DEFAULT_TOP_N = 10
+
+
+# ==============================
+# PHASE 4 — DISPLAY LAYER (Prompt #9)
+# ==============================
+
+DISPLAY_WIDTH = 70
+DISPLAY_BORDER_HEAVY = '=' * DISPLAY_WIDTH
+DISPLAY_BORDER_LIGHT = '-' * DISPLAY_WIDTH
+
+# ANSI color codes (optional, gracefully degrade if not supported)
+ANSI_RESET = '\033[0m'
+ANSI_BOLD = '\033[1m'
+ANSI_DIM = '\033[2m'
+ANSI_CYAN = '\033[36m'
+ANSI_YELLOW = '\033[33m'
+ANSI_GREEN = '\033[32m'
+ANSI_RED = '\033[31m'
+
+SEASON_SUMMARY_SECTIONS = (
+    'header',
+    'outcome',
+    'narrative',
+    'owner_relationship',
+    'legacy_update',
+    'peer_rank',
+    'records_broken',
+    'press_summary',
+)

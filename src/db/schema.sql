@@ -1081,6 +1081,59 @@ CREATE TABLE IF NOT EXISTS press_event (
 
 CREATE INDEX IF NOT EXISTS idx_press_event_team ON press_event(team_id, season_year);
 
+-- ====================
+-- 10b. TIER 2 DRAMATIC PRESS CONFERENCE (Phase 4 Prompt #6)
+-- ====================
+
+-- One row per dramatic event (2-3 questions per event)
+CREATE TABLE IF NOT EXISTS tier2_press_event (
+    id                  INTEGER PRIMARY KEY,
+    season_year         INTEGER NOT NULL,
+    week_number         INTEGER NOT NULL,
+    team_id             INTEGER NOT NULL,
+    coach_id            INTEGER NOT NULL,
+    trigger_type        TEXT NOT NULL,
+    template_id         TEXT NOT NULL,
+    num_questions       INTEGER NOT NULL,
+    resolved_at         TEXT,
+    created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (team_id) REFERENCES team(id),
+    FOREIGN KEY (coach_id) REFERENCES coach_career(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tier2_press_event_team ON tier2_press_event(team_id, season_year);
+
+-- One row per question within a Tier 2 event (2-3 per event)
+CREATE TABLE IF NOT EXISTS tier2_press_response (
+    id                  INTEGER PRIMARY KEY,
+    event_id            INTEGER NOT NULL,
+    question_index      INTEGER NOT NULL,
+    question_text       TEXT NOT NULL,
+    selected_response   TEXT,           -- 'deflect' | 'accountable' | 'confrontational'
+    delta_owner         INTEGER NOT NULL DEFAULT 0,
+    delta_fan           INTEGER NOT NULL DEFAULT 0,
+    delta_locker_room   INTEGER NOT NULL DEFAULT 0,
+    resolved_at         TEXT,
+    FOREIGN KEY (event_id) REFERENCES tier2_press_event(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tier2_press_response_event ON tier2_press_response(event_id);
+
+-- Deduplication guard: prevents same trigger from firing repeatedly
+CREATE TABLE IF NOT EXISTS tier2_trigger_guard (
+    id              INTEGER PRIMARY KEY,
+    team_id         INTEGER NOT NULL,
+    season_year     INTEGER NOT NULL,
+    trigger_type    TEXT NOT NULL,
+    guard_key       TEXT NOT NULL,
+    fired_week      INTEGER NOT NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (team_id) REFERENCES team(id),
+    UNIQUE(team_id, season_year, trigger_type, guard_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tier2_trigger_guard_team ON tier2_trigger_guard(team_id, season_year);
+
 -- Cached peer ranking snapshots
 CREATE TABLE IF NOT EXISTS peer_ranking_snapshot (
     id                  INTEGER PRIMARY KEY,
@@ -1121,3 +1174,15 @@ CREATE TABLE IF NOT EXISTS league_record (
 );
 
 CREATE INDEX IF NOT EXISTS idx_league_record_category ON league_record(category, scope);
+
+-- ====================
+-- 12. NARRATIVE MOMENT TRACKING (Phase 4 Prompt #9)
+-- ====================
+
+CREATE TABLE IF NOT EXISTS narrative_moment_shown (
+    coach_id        INTEGER NOT NULL,
+    moment_type     TEXT NOT NULL,        -- 'dynasty' | 'hof_eligible'
+    shown_season    INTEGER NOT NULL,
+    PRIMARY KEY (coach_id, moment_type),
+    FOREIGN KEY (coach_id) REFERENCES coach_career(id)
+);
