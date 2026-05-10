@@ -19,6 +19,7 @@ from ..db.queries import (
     get_season,
     insert_new_season,
     update_league_state,
+    get_player_coach,
 )
 from ..generation.schedule import generate_full_schedule
 from ..league.archive import archive_season
@@ -107,10 +108,7 @@ def run_stress_test(
                 # Try Tier 2 first, then Tier 1 fallback
                 from src.transactions.tier2_press_conference import generate_tier2_press_event
                 from src.transactions.press_conference import generate_weekly_press_event
-                player_coach_row = conn.execute("""
-                    SELECT id, current_team_id FROM coach_career
-                    WHERE is_player = 1 AND is_active = 1
-                """).fetchone()
+                player_coach_row = get_player_coach(conn)
 
                 tier2_fired = False
                 if player_coach_row and player_coach_row['current_team_id']:

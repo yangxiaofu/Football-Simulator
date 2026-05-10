@@ -23,6 +23,7 @@ from src.utils.constants import (
     PRESS_LOCKER_ROOM_TOP_N_PLAYERS,
     SENTIMENT_MIN,
     SENTIMENT_MAX,
+    FAN_SENTIMENT_DEFAULT,
 )
 from src.utils.press_templates import get_templates_by_context, get_template_by_id
 from src.db.queries import update_sentiment_drivers, get_owner_sentiment
@@ -306,7 +307,7 @@ def resolve_press_event(
             SELECT fan_sentiment FROM team WHERE id = ?
         """, (event['team_id'],)).fetchone()
 
-        current_fan = team['fan_sentiment'] if team['fan_sentiment'] is not None else 50
+        current_fan = team['fan_sentiment'] if team['fan_sentiment'] is not None else FAN_SENTIMENT_DEFAULT
         new_fan = max(SENTIMENT_MIN, min(SENTIMENT_MAX, current_fan + delta_fan))
 
         with conn:

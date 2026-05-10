@@ -26,6 +26,7 @@ from ..db.queries import (
     get_team_coach,
     get_owner_sentiment,
     get_coach_by_id,
+    create_ai_coach,
 )
 from ..league.owner_sentiment import get_firing_probability
 from ..utils.constants import (
@@ -175,14 +176,7 @@ def _create_new_coach(
     last = random.choice(last_names)
     age = random.randint(COACH_MIN_AGE, COACH_MAX_AGE)
 
-    cursor = conn.execute("""
-        INSERT INTO coach_career
-        (first_name, last_name, age, personality_archetype,
-         career_start_year, current_team_id, is_player, is_active)
-        VALUES (?, ?, ?, ?, ?, NULL, 0, 1)
-    """, (first, last, age, archetype, season_year))
-
-    return cursor.lastrowid
+    return create_ai_coach(conn, first, last, age, archetype, season_year)
 
 
 def _handle_coach_firing(

@@ -3389,3 +3389,53 @@ def get_max_stat_career(
         ORDER BY pcs.career_{column_name} DESC
         LIMIT 1
     """).fetchone()
+
+
+# ====================================
+# PHASE 4 REFACTOR — TIER 1 QUERIES
+# ====================================
+
+def get_all_time_coaches_with_legacy(conn: sqlite3.Connection) -> list:
+    """All coaches with at least one legacy score entry."""
+    return conn.execute("""
+        SELECT DISTINCT coach_id FROM coach_legacy_score
+    """).fetchall()
+
+
+def get_player_coach(conn: sqlite3.Connection) -> Optional[sqlite3.Row]:
+    """Get the player coach (is_player=1, is_active=1)."""
+    return conn.execute("""
+        SELECT id, current_team_id FROM coach_career
+        WHERE is_player = 1 AND is_active = 1
+    """).fetchone()
+
+
+def update_owner_sentiment_expectation(
+    conn: sqlite3.Connection, team_id: int, season_year: int, expectation: str
+) -> None:
+    """Update preseason expectation for a team."""
+    conn.execute("""
+        UPDATE owner_sentiment
+        SET preseason_expectation = ?
+        WHERE team_id = ? AND season_year = ?
+    """, (expectation, team_id, season_year))
+
+
+def get_coach_job_offer_by_id(conn: sqlite3.Connection, offer_id: int) -> Optional[sqlite3.Row]:
+    """Get a job offer by ID."""
+    return conn.execute("""
+        SELECT * FROM coach_job_offer WHERE id = ?
+    """, (offer_id,)).fetchone()
+
+
+def create_ai_coach(
+    conn: sqlite3.Connection, first_name: str, last_name: str,
+    age: int, archetype: str, season_year: int
+) -> int:
+    """Create new AI coach. Returns coach_id."""
+    cursor = conn.execute("""
+        INSERT INTO coach_career
+        (first_name, last_name, age, personality_archetype, career_start_year, is_player, is_active)
+        VALUES (?, ?, ?, ?, ?, 0, 1)
+    """, (first_name, last_name, age, archetype, season_year))
+    return cursor.lastrowid

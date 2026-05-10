@@ -15,6 +15,7 @@ from ..db.queries import (
     get_star_holdouts_count,
     get_team_basic_info,
     get_recent_win_pct,
+    update_owner_sentiment_expectation,
 )
 from ..db.connection import execute_one
 from ..utils.constants import (
@@ -96,11 +97,7 @@ def set_preseason_expectation(
             expectation = 'championship'
 
     # Write expectation to DB
-    conn.execute("""
-        UPDATE owner_sentiment
-        SET preseason_expectation = ?
-        WHERE team_id = ? AND season_year = ?
-    """, (expectation, team_id, season_year))
+    update_owner_sentiment_expectation(conn, team_id, season_year, expectation)
 
 
 def update_wins_delta_after_game(

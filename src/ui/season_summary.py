@@ -13,7 +13,7 @@ import sqlite3
 from typing import Optional
 from src.utils.constants import (
     DISPLAY_WIDTH, DISPLAY_BORDER_HEAVY, DISPLAY_BORDER_LIGHT,
-    SEASON_SUMMARY_SECTIONS,
+    SEASON_SUMMARY_SECTIONS, REGULAR_SEASON_WEEKS,
 )
 from src.ui.colors import bold, dim, cyan, yellow, green, red
 from src.db.queries import (
@@ -107,16 +107,16 @@ def render_outcome(conn, season_year, coach_id, use_color):
     if season_row and season_row['champion_team_id'] == team_id:
         return green("★ SUPER BOWL CHAMPIONS ★", use_color)
 
-    # Check if made playoffs (games in weeks after week 17)
+    # Check if made playoffs (games in weeks after regular season)
     playoff_game = conn.execute("""
         SELECT 1
         FROM game g
         JOIN week w ON g.week_id = w.id
         JOIN season s ON w.season_id = s.id
-        WHERE s.year = ? AND w.week_number > 17
+        WHERE s.year = ? AND w.week_number > ?
           AND (g.home_team_id = ? OR g.away_team_id = ?)
         LIMIT 1
-    """, (season_year, team_id, team_id)).fetchone()
+    """, (season_year, REGULAR_SEASON_WEEKS, team_id, team_id)).fetchone()
 
     if playoff_game:
         return yellow("Made Playoffs", use_color)

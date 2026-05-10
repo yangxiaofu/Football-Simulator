@@ -2064,3 +2064,33 @@ SEASON_SUMMARY_SECTIONS = (
     'records_broken',
     'press_summary',
 )
+
+# ====================================
+# PHASE 4 REFACTOR — MISSING CONSTANTS
+# ====================================
+
+# Team Phase Classification
+PHASE_WIN_NOW_AGE_MIN = 26.5  # Minimum roster age for win-now phase
+
+# Narrative Beats
+NARRATIVE_STAR_DEVELOPMENT_MIN_JUMP = 15  # OVR increase for star narrative
+NARRATIVE_DOMINANT_SEASON_WINS = 12  # Wins threshold for dominant season
+NARRATIVE_STRUGGLING_SEASON_WINS = 4  # Wins threshold for struggling season
+NARRATIVE_LARGE_POINT_DIFF = 100  # Point differential threshold
+
+# Coach Offers
+OFFER_QUALITY_RANK_MAP = {'elite': 4, 'good': 3, 'average': 2, 'struggling': 1}
+OFFER_QUALITY_WPCT_LOOKBACK = 2  # Seasons for W% evaluation
+
+# Tier 2 Triggers
+PLAYOFF_WEEK_TO_ROUND_MAP = {18: 'wildcard', 19: 'divisional', 20: 'conference', 21: 'super_bowl'}
+CHAMPIONSHIP_MVP_SACK_VALUE_MULTIPLIER = 20  # Sack value for MVP calc
+
+# UI Display
+CAREER_VIEW_RECENT_SEASONS_LIMIT = 10
+CAREER_VIEW_RECORDS_DISPLAY_LIMIT = 10
+COLOR_CODE_LENGTH_OFFSET_YELLOW = 11  # ANSI centering offset
+COLOR_CODE_LENGTH_OFFSET_BOLD = 8
+
+# Era Context
+TIE_VALUE_IN_WIN_PCT = 0.5  # Tie value in win percentage

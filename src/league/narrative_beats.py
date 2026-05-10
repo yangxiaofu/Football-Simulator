@@ -14,7 +14,10 @@ from ..db.queries import (
     get_all_active_coaches,
     count_team_championships,
 )
-from ..utils.constants import NARRATIVE_DRAMATIC_TRIGGERS
+from ..utils.constants import (
+    NARRATIVE_DRAMATIC_TRIGGERS,
+    NARRATIVE_STAR_DEVELOPMENT_MIN_JUMP,
+)
 from .legacy import evaluate_dynasty_and_hof
 
 
@@ -174,9 +177,9 @@ def detect_dramatic_triggers(
         SELECT COUNT(*) as cnt FROM player_attribute_history
         WHERE season_year = ? AND change_reason = 'development'
           AND attribute_name = 'true_overall'
-          AND (value_after - value_before) >= 15
+          AND (value_after - value_before) >= ?
           AND player_id IN (SELECT id FROM player WHERE team_id = ?)
-    """, (season_year, team_id)).fetchone()
+    """, (season_year, NARRATIVE_STAR_DEVELOPMENT_MIN_JUMP, team_id)).fetchone()
 
     if star_jumps and star_jumps['cnt'] > 0:
         triggers.append('star_player_developed')
@@ -385,10 +388,10 @@ def generate_narrative_beat(
             JOIN player p ON pah.player_id = p.id
             WHERE pah.season_year = ? AND pah.change_reason = 'development'
               AND pah.attribute_name = 'true_overall'
-              AND (pah.value_after - pah.value_before) >= 15
+              AND (pah.value_after - pah.value_before) >= ?
               AND p.team_id = ?
             LIMIT 1
-        """, (season_year, team_id)).fetchone()
+        """, (season_year, NARRATIVE_STAR_DEVELOPMENT_MIN_JUMP, team_id)).fetchone()
 
         if star_row:
             star_name = f"{star_row['first_name']} {star_row['last_name']}"

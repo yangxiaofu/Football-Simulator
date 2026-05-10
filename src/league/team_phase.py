@@ -28,6 +28,7 @@ from ..utils.constants import (
     PHASE_MIN_STARS_BRIDGE,
     PHASE_MIN_STARS_CONTEND,
     PHASE_ROSTER_OLD_AGE_MIN,
+    PHASE_WIN_NOW_AGE_MIN,
     PHASE_STAR_THRESHOLD,
     PHASE_STRONG_RECORD_PCT,
     PHASE_TRANSITION_SPEED,
@@ -101,7 +102,7 @@ def compute_team_phase(
     if (stars >= PHASE_MIN_STARS_CONTEND
             and win_pct >= PHASE_STRONG_RECORD_PCT
             and cap_healthy
-            and avg_age >= 26.5):
+            and avg_age >= PHASE_WIN_NOW_AGE_MIN):
         if random.random() < speed['to_win_now']:
             return 'win_now'
         return 'contend'

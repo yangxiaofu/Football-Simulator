@@ -11,7 +11,7 @@ Sections:
 """
 
 import sqlite3
-from src.utils.constants import DISPLAY_WIDTH, DISPLAY_BORDER_HEAVY, DISPLAY_BORDER_LIGHT
+from src.utils.constants import DISPLAY_WIDTH, DISPLAY_BORDER_HEAVY, DISPLAY_BORDER_LIGHT, REGULAR_SEASON_WEEKS
 from src.ui.colors import bold, dim, cyan, yellow
 from src.db.queries import get_coach_legacy_scores, get_peer_ranking
 
@@ -147,9 +147,9 @@ def render_career_totals(conn, coach_id, use_color):
             JOIN week w ON g.week_id = w.id
             JOIN season s ON w.season_id = s.id
             WHERE (g.home_team_id = ? OR g.away_team_id = ?)
-              AND w.week_number > 17
+              AND w.week_number > ?
               AND s.year BETWEEN ? AND ?
-        """, (team_id, team_id, start_year, end_year)).fetchall()
+        """, (team_id, team_id, REGULAR_SEASON_WEEKS, start_year, end_year)).fetchall()
         playoff_appearances.extend([p['season_year'] for p in playoffs])
 
     n_championships = len(championships)

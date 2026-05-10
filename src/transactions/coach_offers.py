@@ -19,6 +19,7 @@ from ..db.queries import (
     get_team_basic_info,
     get_recent_win_pct,
     get_all_teams_ordered,
+    get_coach_job_offer_by_id,
 )
 from ..utils.constants import (
     VACANCY_OFFER_WINDOW_WEEKS,
@@ -27,6 +28,7 @@ from ..utils.constants import (
     OFFER_QUALITY_TIERS,
     OFFER_QUALITY_THRESHOLDS,
     OFFER_COUNT_BY_LEGACY_QUARTILE,
+    OFFER_QUALITY_RANK_MAP,
 )
 
 
@@ -52,7 +54,7 @@ def generate_offers_for_vacant_coach(
     for team in teams:
         quality = compute_offer_quality(conn, team['id'])
         # Convert quality to numeric score for sorting
-        quality_rank = {'elite': 4, 'good': 3, 'average': 2, 'struggling': 1}.get(quality, 1)
+        quality_rank = OFFER_QUALITY_RANK_MAP.get(quality, 1)
         team_scores.append({
             'team_id': team['id'],
             'quality': quality,
@@ -119,10 +121,7 @@ def accept_offer_action(
     from ..transactions.coaching import assign_coach_to_team
 
     # Get offer details
-    offer_row = conn.execute(
-        "SELECT coach_id, team_id FROM coach_job_offer WHERE id = ?",
-        (offer_id,),
-    ).fetchone()
+    offer_row = get_coach_job_offer_by_id(conn, offer_id)
 
     if not offer_row:
         return

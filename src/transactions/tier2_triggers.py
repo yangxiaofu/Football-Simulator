@@ -15,6 +15,8 @@ from ..utils.constants import (
     TIER2_STAR_RATING_THRESHOLD,
     TIER2_LOSING_STREAK_GAMES,
     TIER2_TRIGGER_PRIORITY,
+    PLAYOFF_WEEK_TO_ROUND_MAP,
+    REGULAR_SEASON_WEEKS,
 )
 
 
@@ -135,13 +137,12 @@ def detect_playoff_loss(
     week_number: int,
 ) -> Tuple[bool, dict]:
     """Detect a playoff loss (wildcard, divisional, or conference round)."""
-    # Only check during playoff weeks (18+)
-    if week_number < 18:
+    # Only check during playoff weeks (REGULAR_SEASON_WEEKS + 1 and beyond)
+    if week_number <= REGULAR_SEASON_WEEKS:
         return (False, {})
 
     # Determine round name from week
-    round_map = {18: 'wildcard', 19: 'divisional', 20: 'conference', 21: 'super_bowl'}
-    round_name = round_map.get(week_number, f'week_{week_number}')
+    round_name = PLAYOFF_WEEK_TO_ROUND_MAP.get(week_number, f'week_{week_number}')
 
     guard_key = f"round_{round_name}"
     if is_trigger_guarded(conn, team_id, season_year, 'playoff_loss', guard_key):

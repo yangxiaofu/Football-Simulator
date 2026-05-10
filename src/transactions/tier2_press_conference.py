@@ -22,6 +22,7 @@ from ..utils.constants import (
     SENTIMENT_MIN,
     SENTIMENT_MAX,
     PRESS_LOCKER_ROOM_TOP_N_PLAYERS,
+    FAN_SENTIMENT_DEFAULT,
 )
 from ..utils.tier2_templates import (
     get_tier2_templates_by_trigger,
@@ -215,7 +216,7 @@ def resolve_tier2_question(
             SELECT fan_sentiment FROM team WHERE id = ?
         """, (team_id,)).fetchone()
 
-        current_fan = team['fan_sentiment'] if team and team['fan_sentiment'] is not None else 50
+        current_fan = team['fan_sentiment'] if team and team['fan_sentiment'] is not None else FAN_SENTIMENT_DEFAULT
         new_fan = max(SENTIMENT_MIN, min(SENTIMENT_MAX, current_fan + delta_fan))
 
         with conn:

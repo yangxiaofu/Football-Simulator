@@ -11,6 +11,8 @@ from ..db.queries import (
     get_all_active_coaches,
     insert_peer_ranking,
     get_peer_ranking,
+    get_all_time_coaches_with_legacy,
+    get_player_coach,
 )
 from .legacy import compute_career_legacy_total
 
@@ -42,9 +44,7 @@ def update_peer_rankings(
     active_totals.sort(key=lambda x: x[1], reverse=True)
 
     # Get all-time coaches (all coaches with at least one legacy score)
-    all_time_coaches = conn.execute("""
-        SELECT DISTINCT coach_id FROM coach_legacy_score
-    """).fetchall()
+    all_time_coaches = get_all_time_coaches_with_legacy(conn)
 
     all_time_totals = []
     for row in all_time_coaches:
@@ -90,11 +90,7 @@ def get_player_peer_rank(
         Or None if no player coach exists
     """
     # Find player coach
-    player_coach = conn.execute("""
-        SELECT id FROM coach_career
-        WHERE is_player = 1
-        LIMIT 1
-    """).fetchone()
+    player_coach = get_player_coach(conn)
 
     if not player_coach:
         return None
