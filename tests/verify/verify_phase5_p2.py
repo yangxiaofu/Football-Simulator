@@ -137,8 +137,8 @@ def check_team_stats(conn, season_year):
 
 
 def check_stars_placeholder(save_path):
-    """Check 5: Verify --stars flag prints placeholder message."""
-    print("\n[Check 5] Stars placeholder displays...")
+    """Check 5: Verify --stars flag exits 0 and shows stars header or placeholder."""
+    print("\n[Check 5] Stars placeholder/real data displays...")
 
     result = subprocess.run(
         ['python', 'view_stats.py', save_path, '--stars'],
@@ -146,11 +146,23 @@ def check_stars_placeholder(save_path):
         text=True
     )
 
-    if 'Prompt #4' in result.stdout:
-        print(f"  ✓ Stars placeholder message displays correctly")
+    if result.returncode != 0:
+        print(f"  ✗ --stars exited {result.returncode}")
+        print(f"    Output: {result.stdout[:200]}")
+        return False
+
+    # Accept: old placeholder text OR real stars header OR empty-state message
+    accepted = (
+        'Prompt #4' in result.stdout
+        or 'STARS OF THE WEEK' in result.stdout
+        or 'No Stars of the Week' in result.stdout
+        or 'Stars of the Week' in result.stdout
+    )
+    if accepted:
+        print(f"  ✓ --stars displays correctly (exits 0, shows stars output)")
         return True
     else:
-        print(f"  ✗ Stars placeholder message missing")
+        print(f"  ✗ --stars output not recognized")
         print(f"    Output: {result.stdout[:200]}")
         return False
 

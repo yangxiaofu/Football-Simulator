@@ -6,7 +6,8 @@ Usage:
     python view_stats.py saves/test.db --player 123                   # player weekly history
     python view_stats.py saves/test.db --team CHI                     # team season stats
     python view_stats.py saves/test.db --week 5                       # Week 5 top performers
-    python view_stats.py saves/test.db --stars                        # Stars of the Week (placeholder)
+    python view_stats.py saves/test.db --stars                        # Stars of the Week
+    python view_stats.py saves/test.db --stars --week 3               # Stars for Week 3 only
 """
 import argparse
 import sys
@@ -80,13 +81,13 @@ def main():
     elif args.team:
         print_team_season_stats(conn, args.team.upper(), season_year)
 
+    elif args.stars:
+        week_filter = args.week if hasattr(args, 'week') and args.week else None
+        print_stars_of_week(conn, season_year, week_number=week_filter)
+
     elif args.week:
         # Week recap subcommand (no --leaderboard)
         print_week_stats(conn, season_year, args.week)
-
-    elif args.stars:
-        # Placeholder for Prompt #4
-        print_stars_of_week(conn, season_year, week_number=None)
 
     else:
         parser.print_help()

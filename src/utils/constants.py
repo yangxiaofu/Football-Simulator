@@ -1715,6 +1715,67 @@ STAR_RETURN_TD_WEIGHT = 50.0      # Punt/kick return TDs
 # Weekly award types
 WEEKLY_AWARD_TYPES = ['OFFENSE', 'DEFENSE', 'SPECIAL_TEAMS', 'USER_TEAM_MVP']
 
+# ======================
+# STARS OF THE WEEK SELECTION (Phase 5 Prompt #4)
+# ======================
+
+# Context weights
+STARS_WIN_BONUS = 5.0
+STARS_OPPONENT_STRENGTH_BONUS = 8.0
+STARS_CLUTCH_BONUS = 0.0        # deferred: quarter splits not tracked by engine
+STARS_KEY_PLAY_TIEBREAKER = 0.5
+
+# Position group routing (must match actual player.position values in DB)
+STARS_OFFENSE_POSITIONS = ('QB', 'RB', 'WR', 'TE')   # FB maps to RB in actual schema
+STARS_DEFENSE_POSITIONS = ('DL', 'LB', 'CB', 'S')    # grouped positions, not granular
+STARS_SPECIAL_TEAMS_POSITIONS = ('K', 'P')
+
+# Base stat value coefficients — design doc §4.2, adapted for actual player_week_stats columns
+STARS_BSV_QB_PASS_YARDS = 0.04
+STARS_BSV_QB_PASS_TD = 4.0
+STARS_BSV_QB_PASS_INT = -2.0
+STARS_BSV_QB_RUSH_YARDS = 0.5
+
+STARS_BSV_RB_RUSH_YARDS = 0.1
+STARS_BSV_RB_RUSH_TD = 6.0
+STARS_BSV_RB_REC_YARDS = 0.05
+
+STARS_BSV_RECEIVER_REC_YARDS = 0.1
+STARS_BSV_RECEIVER_REC_TD = 6.0
+STARS_BSV_RECEIVER_RECEPTIONS = 0.5
+
+STARS_BSV_DLLB_SACKS = 4.0
+STARS_BSV_DLLB_TACKLES = 1.5
+STARS_BSV_DLLB_FF = 6.0
+# NOTE: fumble_recoveries and def_tds are not columns in player_week_stats → dropped.
+# Scoped for a future prompt that extends the engine's defensive event surface.
+
+STARS_BSV_DB_TACKLES = 0.5
+STARS_BSV_DB_INT = 8.0
+STARS_BSV_DB_FF = 6.0
+# NOTE: fumble_recoveries and def_tds not tracked → terms dropped (same reason as above).
+
+STARS_BSV_K_FG_MADE = 3.0
+STARS_BSV_K_FG_50PLUS = 4.0     # additive bonus applied when fg_long >= 50
+STARS_BSV_K_XP_MADE = 1.0
+
+STARS_BSV_P_PUNT_YARDS = 0.05
+# NOTE: punts_inside_20 not tracked in player_week_stats → term dropped. Future prompt.
+
+STARS_BSV_RET_RETURN_YARDS = 0.1
+STARS_BSV_RET_RETURN_TDS = 12.0
+
+# ST threshold: at least ONE of these must be met to award SPECIAL_TEAMS star
+# Uses actual columns: fg_long (distance, not count) and computed return_tds
+STARS_ST_FG_LONG_THRESHOLD = 50  # fg_long >= this value → qualifies
+# (return_tds > 0 is the other gate; checked inline in _st_meets_threshold)
+
+# Award type strings — must exactly match WEEKLY_AWARD_TYPES values
+STARS_AWARD_OFFENSE = 'OFFENSE'
+STARS_AWARD_DEFENSE = 'DEFENSE'
+STARS_AWARD_SPECIAL_TEAMS = 'SPECIAL_TEAMS'
+STARS_AWARD_USER_TEAM_MVP = 'USER_TEAM_MVP'
+
 
 # ======================
 # LEADERBOARD DISPLAY (Phase 5 Prompt #2)
@@ -2180,3 +2241,54 @@ COLOR_CODE_LENGTH_OFFSET_BOLD = 8
 
 # Era Context
 TIE_VALUE_IN_WIN_PCT = 0.5  # Tie value in win percentage
+
+
+# ======================
+# DEPTH CHART SYSTEM (Phase 5 Prompt #3)
+# ======================
+
+# 27 granular depth chart positions
+DEPTH_CHART_POSITIONS = [
+    # Offense (12)
+    'QB', 'RB', 'FB', 'WR1', 'WR2', 'WR3', 'TE',
+    'LT', 'LG', 'C', 'RG', 'RT',
+    # Defense (11)
+    'LE', 'DT1', 'DT2', 'RE', 'LOLB', 'MLB', 'ROLB',
+    'CB1', 'CB2', 'FS', 'SS',
+    # Special Teams (4 - LS/KR/PR are roles, not starter positions)
+    'K', 'P', 'KR', 'PR',
+]
+
+# Map depth chart position to generic player position
+DEPTH_CHART_TO_PLAYER_POSITION = {
+    'QB': 'QB', 'RB': 'RB', 'FB': 'RB',  # FB maps to RB
+    'WR1': 'WR', 'WR2': 'WR', 'WR3': 'WR',
+    'TE': 'TE',
+    'LT': 'OL', 'LG': 'OL', 'C': 'OL', 'RG': 'OL', 'RT': 'OL',
+    'LE': 'DL', 'DT1': 'DL', 'DT2': 'DL', 'RE': 'DL',
+    'LOLB': 'LB', 'MLB': 'LB', 'ROLB': 'LB',
+    'CB1': 'CB', 'CB2': 'CB',
+    'FS': 'S', 'SS': 'S',
+    'K': 'K', 'P': 'P',
+    'KR': 'WR',  # Kick returner typically WR or RB
+    'PR': 'WR',  # Punt returner typically WR
+}
+
+# Positions that can be played interchangeably without penalty
+FLEXIBLE_POSITION_EQUIVALENTS = {
+    'OL': ['LT', 'LG', 'C', 'RG', 'RT'],  # All O-line positions interchangeable
+    'DL': ['LE', 'DT1', 'DT2', 'RE'],     # D-line positions interchangeable
+    'WR': ['WR1', 'WR2', 'WR3'],          # WR positions interchangeable
+    'CB': ['CB1', 'CB2'],                 # CB positions interchangeable
+    'S': ['FS', 'SS'],                    # Safety positions interchangeable
+}
+
+# SAR penalty when player's position doesn't match depth chart slot
+# (and not in FLEXIBLE_POSITION_EQUIVALENTS)
+OUT_OF_POSITION_SAR_PENALTY = 10
+
+# Max depth per position (starter + backups)
+MAX_DEPTH_PER_POSITION = 3  # slot_order 1, 2, 3
+
+# Injury statuses that trigger auto-promotion
+AUTO_PROMOTE_INJURY_STATUSES = ['Out', 'IR', 'PUP']

@@ -17,6 +17,8 @@ from ..db.queries import (
     get_team_by_abbreviation,
     get_team_season_running,
     get_all_player_week_stats,
+    get_weekly_awards_display,
+    get_league_state,
 )
 from ..utils.constants import (
     LEADERBOARD_QUALIFIER_PASS_ATT_PER_GAME,
@@ -691,24 +693,54 @@ def print_stars_of_week(
     season_year: int,
     week_number: Optional[int] = None
 ) -> None:
-    """
-    Display Stars of the Week awards (placeholder for Prompt #4).
+    """Display Stars of the Week awards."""
+    awards = get_weekly_awards_display(conn, season_year, week_number)
 
-    Args:
-        conn: Database connection
-        season_year: Season year
-        week_number: Week number (optional, not used in placeholder)
-    """
-    print("=" * 70)
-    if week_number:
-        print(f"STARS OF THE WEEK — Week {week_number}, {season_year}")
-    else:
-        print(f"STARS OF THE WEEK — {season_year}")
-    print("=" * 70)
-    print()
-    print("Stars of the Week awards will be implemented in Phase 5 Prompt #4.")
-    print()
-    if week_number:
-        print(f"For now, use --week {week_number} to see top performances from this week.")
-    else:
-        print("For now, use --week <N> to see top performances from a specific week.")
+    if not awards:
+        print("=" * 70)
+        if week_number:
+            print(f"STARS OF THE WEEK — Week {week_number}, {season_year}")
+        else:
+            print(f"STARS OF THE WEEK — {season_year}")
+        print("=" * 70)
+        print()
+        print("No Stars of the Week available for that range.")
+        return
+
+    league = get_league_state(conn)
+    user_team_id = league['user_team_id'] if league else None
+
+    # Group by week_number
+    weeks_seen = []
+    by_week: dict[int, list] = {}
+    for row in awards:
+        wk = row['week_number']
+        if wk not in by_week:
+            by_week[wk] = []
+            weeks_seen.append(wk)
+        by_week[wk].append(row)
+
+    award_label = {
+        'OFFENSE': 'Offensive Player',
+        'DEFENSE': 'Defensive Player',
+        'SPECIAL_TEAMS': 'Special Teams Player',
+        'USER_TEAM_MVP': 'Your Team MVP',
+    }
+
+    for wk in weeks_seen:
+        print("=" * 70)
+        label = f"STARS OF THE WEEK — Week {wk}, {season_year}"
+        print(label)
+        print("=" * 70)
+        for row in by_week[wk]:
+            award_type = row['award_type']
+            name = f"{row['first_name']} {row['last_name']}"
+            team = row['team_abbr']
+            pos = row['position']
+            is_user = (row['team_id'] == user_team_id)
+            marker = " ◄ YOUR TEAM" if is_user else ""
+            category = award_label.get(award_type, award_type)
+            print(f"  {category}: {name} ({team}, {pos}){marker}")
+            if row['narrative_blurb']:
+                print(f"    {row['narrative_blurb']}")
+        print()

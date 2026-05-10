@@ -81,6 +81,22 @@ def advance_week(
         from ..league.weekly_stats import aggregate_week_stats
         aggregate_week_stats(conn, season_year, week_num, is_playoff=False)
 
+        # Select Stars of the Week (Phase 5 Prompt #4)
+        from ..league.stars_selection import select_stars_for_week
+        stars_summary = select_stars_for_week(conn, season_year, week_num, is_playoff=False)
+        print()
+        print(f"Stars of the Week — Week {week_num}:")
+        for cat in ('OFFENSE', 'DEFENSE', 'SPECIAL_TEAMS', 'USER_TEAM_MVP'):
+            star = stars_summary.get(cat.lower())
+            if star is None:
+                if cat == 'SPECIAL_TEAMS':
+                    print(f"  {cat}: (no qualifier — threshold not met)")
+            else:
+                print(f"  {cat}: {star['player_name']} ({star['team_abbr']}, {star['position']})")
+                blurb = star.get('narrative_blurb', '')
+                if blurb:
+                    print(f"    {blurb}")
+
         # Update sentiment drivers every 4 weeks
         if week_num % 4 == 0:
             from ..league.owner_sentiment import update_weekly_drivers
@@ -90,6 +106,29 @@ def advance_week(
 
         # Heal injuries (decrement weeks remaining)
         healed = heal_injured_players(conn)
+
+        # Phase 5 Prompt #3: Process depth chart adjustments after injuries heal
+        from ..transactions.depth_chart import process_injury_fallback, process_healing_restoration
+        from ..db.queries import get_all_teams
+        injury_notifications = []
+        healing_notifications = []
+
+        for team in get_all_teams(conn):
+            team_injury_notifs = process_injury_fallback(conn, team['id'], season_year, week_num)
+            team_healing_notifs = process_healing_restoration(conn, team['id'], season_year, week_num)
+            injury_notifications.extend(team_injury_notifs)
+            healing_notifications.extend(team_healing_notifs)
+
+        # Optional: Print notifications to console
+        if injury_notifications:
+            print(f"\n🔄 Depth Chart Auto-Promotions ({len(injury_notifications)}):")
+            for notif in injury_notifications:
+                print(f"  {notif['position']}: {notif['promoted']} promoted (replacing injured {notif['injured']})")
+
+        if healing_notifications:
+            print(f"\n✅ Depth Chart Restorations ({len(healing_notifications)}):")
+            for notif in healing_notifications:
+                print(f"  {notif['position']}: {notif['restored']} restored (demoting {notif['demoted']})")
 
         # Reset weekly stamina
         reset_weekly_stamina(conn)

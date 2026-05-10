@@ -76,7 +76,9 @@ Save format: One `.db` file per franchise (SQLite database)
 │   │   ├── owner_sentiment.py   ← owner sentiment tracking, hot seat tiers (Phase 4)
 │   │   ├── era_context.py       ← era difficulty multiplier computation (Phase 4 Prompt #7)
 │   │   ├── peer_ranking.py      ← coach career peer rankings (Phase 4 Prompt #7)
-│   │   └── narrative_beats.py   ← end-of-season narrative generation (Phase 4 Prompt #9)
+│   │   ├── narrative_beats.py   ← end-of-season narrative generation (Phase 4 Prompt #9)
+│   │   ├── weekly_stats.py      ← weekly + season running stat aggregation (Phase 5)
+│   │   └── stars_selection.py   ← Stars of the Week selection algorithm (Phase 5)
 │   ├── transactions/      ← trades, free agency, contracts, draft, coaching
 │   │   ├── contracts.py         ← contract signing, restructuring, release, market value
 │   │   ├── satisfaction.py      ← weekly evaluation, warning signals, interventions, contagion
@@ -107,7 +109,8 @@ Save format: One `.db` file per franchise (SQLite database)
 │       ├── constants.py         ← all tuning constants, thresholds, position lists
 │       ├── ai_behavior_matrix.py ← 5x5 personality×phase behavior grid (Phase 4)
 │       ├── press_templates.py   ← 30 press conference templates across 8 contexts (Phase 4 Prompt #5)
-│       └── tier2_templates.py   ← 24 dramatic press templates (Phase 4 Prompt #6)
+│       ├── tier2_templates.py   ← 24 dramatic press templates (Phase 4 Prompt #6)
+│       └── star_templates.py    ← 40 Stars of the Week narrative templates (Phase 5 Prompt #4)
 ├── tests/
 │   └── verify/            ← Phase 4 verification scripts
 │       ├── verify_phase4_p1.py      ← coach identity schema
@@ -119,7 +122,11 @@ Save format: One `.db` file per franchise (SQLite database)
 │       ├── verify_phase4_p7.py      ← coach legacy expansion
 │       ├── verify_phase4_p8.py      ← historical records
 │       ├── verify_phase4_p9.py      ← end-of-season UI
-│       └── verify_phase4_shipgate.py ← ship gate (8 exit criteria)
+│       ├── verify_phase4_shipgate.py ← ship gate (8 exit criteria)
+│       ├── verify_phase5_p1.py      ← stats schema & weekly aggregation
+│       ├── verify_phase5_p2.py      ← view stats CLI
+│       ├── verify_phase5_p3.py      ← depth chart system
+│       └── verify_phase5_p4.py      ← Stars of the Week
 ├── saves/                 ← franchise .db files (gitignored)
 └── assets/                ← future UI assets (logos, fonts)
 ```
@@ -320,8 +327,19 @@ Goal: Weekly stat aggregation, leaderboards, Stars of the Week, and enhanced med
   - NFL-style leaderboard qualifiers (14 att/game passing, 6.25 car/game rushing)
   - `--stars` shows empty-state message until Prompt #4
   - Verification: `python tests/verify/verify_phase5_p2.py` (9 checks including scope-creep guard, Phase 4 regression, layer boundary scan)
-- [ ] **Prompt #3**: TBD
-- [ ] **Prompt #4**: Stars of the Week Selection Algorithm
+- [x] **Prompt #3**: Depth Chart System
+  - `depth_chart` table (27 granular positions, UNIQUE constraint, 3 indexes)
+  - `src/transactions/depth_chart.py` (CRUD, injury fallback, healing restoration, position validation)
+  - Engine integration: `game_sim.py` uses depth chart for lineup building
+  - Season integration: `season.py` calls `process_injury_fallback` / `process_healing_restoration` after each week
+  - CLI: `run_season.py --depth-chart`, `--set-starter`, `--swap-depth`, `--reset-depth`
+  - Verification: `python tests/verify/verify_phase5_p3.py`
+- [x] **Prompt #4**: Stars of the Week Selection Algorithm
+  - `src/league/stars_selection.py` — selection algorithm (zero inline SQL), 4 award categories, ST threshold gate, idempotent upsert
+  - `src/utils/star_templates.py` — ~40 narrative templates across OFFENSE / DEFENSE / SPECIAL_TEAMS / USER_TEAM_MVP (lambda match pattern)
+  - `weekly_award` table populated after each regular-season and playoff week
+  - Auto-print in weekly summary (season.py + playoffs.py); `view_stats.py --stars [--week N]` renders real data
+  - Verification: `python tests/verify/verify_phase5_p4.py` (13 checks including 4 mandatory guards)
 - [ ] **Prompt #5**: TBD
 
 **Phase 5 In Progress...**

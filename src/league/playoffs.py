@@ -123,6 +123,22 @@ def simulate_playoff_round(
         from ..league.weekly_stats import aggregate_week_stats
         aggregate_week_stats(conn, season_year, week_number, is_playoff=True)
 
+        # Select Stars of the Week (Phase 5 Prompt #4)
+        from ..league.stars_selection import select_stars_for_week
+        stars_summary = select_stars_for_week(conn, season_year, week_number, is_playoff=True)
+        print()
+        print(f"Stars of the Week — {round_name} (Week {week_number}):")
+        for cat in ('OFFENSE', 'DEFENSE', 'SPECIAL_TEAMS', 'USER_TEAM_MVP'):
+            star = stars_summary.get(cat.lower())
+            if star is None:
+                if cat == 'SPECIAL_TEAMS':
+                    print(f"  {cat}: (no qualifier — threshold not met)")
+            else:
+                print(f"  {cat}: {star['player_name']} ({star['team_abbr']}, {star['position']})")
+                blurb = star.get('narrative_blurb', '')
+                if blurb:
+                    print(f"    {blurb}")
+
         heal_injured_players(conn)
         reset_weekly_stamina(conn)
 

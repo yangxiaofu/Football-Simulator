@@ -791,6 +791,15 @@ def get_team_conference_id(
 # ROSTER WITH CONTRACTS
 # ======================
 
+def get_team_roster(conn: sqlite3.Connection, team_id: int) -> list[sqlite3.Row]:
+    """Get all active players on a team, sorted by position and overall."""
+    return conn.execute("""
+        SELECT * FROM player
+        WHERE team_id = ? AND roster_status = 'active'
+        ORDER BY position, true_overall DESC
+    """, (team_id,)).fetchall()
+
+
 def get_roster_with_contracts(
     conn: sqlite3.Connection, team_id: int, season_year: int,
 ) -> list[sqlite3.Row]:
@@ -4186,3 +4195,225 @@ def delete_weekly_awards_for_season(conn: sqlite3.Connection, season_year: int) 
         DELETE FROM weekly_award WHERE season_year = ?
     """, (season_year,))
     return cursor.rowcount
+
+
+def upsert_weekly_award(
+    conn: sqlite3.Connection, season_year: int, week_number: int,
+    is_playoff: int, award_type: str, player_id: int, team_id: int,
+    score: float, narrative_blurb: str
+) -> int:
+    """INSERT OR REPLACE a weekly award (idempotent on the UNIQUE key)."""
+    cursor = conn.execute("""
+        INSERT OR REPLACE INTO weekly_award
+            (season_year, week_number, is_playoff, award_type,
+             player_id, team_id, score, narrative_blurb)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (season_year, week_number, is_playoff, award_type,
+          player_id, team_id, score, narrative_blurb))
+    return cursor.lastrowid
+
+
+def get_weekly_awards_display(
+    conn: sqlite3.Connection, season_year: int, week_number: Optional[int] = None
+) -> list[sqlite3.Row]:
+    """Get weekly awards for display. week_number=None returns all weeks for the season."""
+    if week_number is not None:
+        return conn.execute("""
+            SELECT wa.*, p.first_name, p.last_name, p.position, t.abbreviation AS team_abbr
+            FROM weekly_award wa
+            JOIN player p ON p.id = wa.player_id
+            JOIN team t ON t.id = wa.team_id
+            WHERE wa.season_year = ? AND wa.week_number = ?
+            ORDER BY wa.week_number, wa.award_type
+        """, (season_year, week_number)).fetchall()
+    else:
+        return conn.execute("""
+            SELECT wa.*, p.first_name, p.last_name, p.position, t.abbreviation AS team_abbr
+            FROM weekly_award wa
+            JOIN player p ON p.id = wa.player_id
+            JOIN team t ON t.id = wa.team_id
+            WHERE wa.season_year = ?
+            ORDER BY wa.week_number, wa.award_type
+        """, (season_year,)).fetchall()
+
+
+def get_stars_candidates(
+    conn: sqlite3.Connection, season_year: int, week_number: int, is_playoff_int: int
+) -> list[dict]:
+    """Return all players who played this week with enriched context for stars selection.
+
+    Each dict includes all player_week_stats columns plus:
+      player_name, position, team_id, team_abbr,
+      return_yards (punt + kick combined), return_tds (combined),
+      won (1/0), score_diff (abs),
+      opponent_w_pct (0.0-1.0), key_play_count.
+    """
+    rows = conn.execute("""
+        SELECT
+            pws.*,
+            p.first_name || ' ' || p.last_name                  AS player_name,
+            p.position,
+            t.abbreviation                                        AS team_abbr,
+            opp_t.abbreviation                                    AS opp_abbr,
+            (pws.punt_return_yards + pws.kick_return_yards)      AS return_yards,
+            (pws.punt_return_tds + pws.kick_return_tds)          AS return_tds,
+            CASE
+                WHEN g.home_team_id = pws.team_id
+                     AND g.home_score > g.away_score  THEN 1
+                WHEN g.away_team_id = pws.team_id
+                     AND g.away_score > g.home_score  THEN 1
+                ELSE 0
+            END                                                   AS won,
+            ABS(COALESCE(g.home_score, 0) - COALESCE(g.away_score, 0))
+                                                                  AS score_diff,
+            CASE
+                WHEN g.home_team_id = pws.team_id THEN g.away_team_id
+                ELSE g.home_team_id
+            END                                                   AS opponent_team_id,
+            COALESCE(
+                CAST(opp.wins AS REAL) /
+                NULLIF(opp.wins + opp.losses + opp.ties, 0),
+                0.5
+            )                                                     AS opponent_w_pct,
+            COUNT(kp.id)                                          AS key_play_count
+        FROM player_week_stats pws
+        JOIN player p ON p.id = pws.player_id
+        JOIN team t ON t.id = pws.team_id
+        JOIN game g ON (g.home_team_id = pws.team_id OR g.away_team_id = pws.team_id)
+            AND g.is_complete = 1
+        JOIN week w ON g.week_id = w.id AND w.week_number = pws.week_number
+        JOIN season s ON w.season_id = s.id AND s.year = pws.season_year
+        LEFT JOIN team opp_t ON opp_t.id = CASE
+                WHEN g.home_team_id = pws.team_id THEN g.away_team_id
+                ELSE g.home_team_id
+            END
+        LEFT JOIN team_season_running opp ON
+            opp.team_id = CASE
+                WHEN g.home_team_id = pws.team_id THEN g.away_team_id
+                ELSE g.home_team_id
+            END
+            AND opp.season_year = pws.season_year
+            AND opp.is_playoff = 0
+        LEFT JOIN key_play kp ON kp.game_id = g.id
+            AND kp.primary_player_id = pws.player_id
+        WHERE pws.season_year = ? AND pws.week_number = ? AND pws.is_playoff = ?
+        GROUP BY pws.id
+    """, (season_year, week_number, is_playoff_int)).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ======================
+# DEPTH CHART (Phase 5 Prompt #3)
+# ======================
+
+def get_depth_chart(conn: sqlite3.Connection, team_id: int, season_year: int,
+                    position_slot: Optional[str] = None) -> list[sqlite3.Row]:
+    """Retrieve depth chart entries, optionally filtered to one position."""
+    if position_slot:
+        return conn.execute("""
+            SELECT * FROM depth_chart
+            WHERE team_id = ? AND season_year = ? AND position_slot = ?
+            ORDER BY slot_order
+        """, (team_id, season_year, position_slot)).fetchall()
+    else:
+        return conn.execute("""
+            SELECT * FROM depth_chart
+            WHERE team_id = ? AND season_year = ?
+            ORDER BY position_slot, slot_order
+        """, (team_id, season_year)).fetchall()
+
+
+def get_starter_for_position(conn: sqlite3.Connection, team_id: int,
+                              season_year: int, position_slot: str) -> Optional[sqlite3.Row]:
+    """Get current starter (slot_order=1) for a position. Returns None if no entry."""
+    return conn.execute("""
+        SELECT * FROM depth_chart
+        WHERE team_id = ? AND season_year = ? AND position_slot = ? AND slot_order = 1
+    """, (team_id, season_year, position_slot)).fetchone()
+
+
+def get_backup_for_position(conn: sqlite3.Connection, team_id: int,
+                             season_year: int, position_slot: str,
+                             slot_order: int) -> Optional[sqlite3.Row]:
+    """Get backup at specific depth (slot_order=2, 3, etc.)."""
+    return conn.execute("""
+        SELECT * FROM depth_chart
+        WHERE team_id = ? AND season_year = ? AND position_slot = ? AND slot_order = ?
+    """, (team_id, season_year, position_slot, slot_order)).fetchone()
+
+
+def upsert_depth_chart_entry(conn: sqlite3.Connection, team_id: int, season_year: int,
+                              position_slot: str, slot_order: int, player_id: int,
+                              is_user_set: int = 0, replaced_player_id: Optional[int] = None,
+                              notes: Optional[str] = None):
+    """Insert or update depth chart entry using ON CONFLICT DO UPDATE."""
+    conn.execute("""
+        INSERT INTO depth_chart
+        (team_id, season_year, position_slot, slot_order, player_id, is_user_set, replaced_player_id, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(team_id, season_year, position_slot, slot_order)
+        DO UPDATE SET
+            player_id = excluded.player_id,
+            is_user_set = excluded.is_user_set,
+            replaced_player_id = excluded.replaced_player_id,
+            notes = excluded.notes,
+            updated_at = CURRENT_TIMESTAMP
+    """, (team_id, season_year, position_slot, slot_order, player_id, is_user_set, replaced_player_id, notes))
+
+
+def delete_depth_chart_entry(conn: sqlite3.Connection, team_id: int,
+                              season_year: int, position_slot: str, slot_order: int):
+    """Remove a depth chart entry."""
+    conn.execute("""
+        DELETE FROM depth_chart
+        WHERE team_id = ? AND season_year = ? AND position_slot = ? AND slot_order = ?
+    """, (team_id, season_year, position_slot, slot_order))
+
+
+def clear_depth_chart_for_team(conn: sqlite3.Connection, team_id: int, season_year: int):
+    """Remove all depth chart entries for a team/season."""
+    conn.execute("""
+        DELETE FROM depth_chart
+        WHERE team_id = ? AND season_year = ?
+    """, (team_id, season_year))
+
+
+def get_positions_for_player(conn: sqlite3.Connection, player_id: int,
+                              season_year: int) -> list[sqlite3.Row]:
+    """Find all depth chart slots where player is assigned (prevent duplicates)."""
+    return conn.execute("""
+        SELECT * FROM depth_chart
+        WHERE player_id = ? AND season_year = ?
+    """, (player_id, season_year)).fetchall()
+
+
+def get_injured_starters(conn: sqlite3.Connection, team_id: int,
+                         season_year: int) -> list[sqlite3.Row]:
+    """Find all starters with injury_status in AUTO_PROMOTE_INJURY_STATUSES.
+    Returns depth chart entries joined with player injury status."""
+    from src.utils.constants import AUTO_PROMOTE_INJURY_STATUSES
+    placeholders = ','.join('?' * len(AUTO_PROMOTE_INJURY_STATUSES))
+    return conn.execute(f"""
+        SELECT dc.*, p.injury_status, p.injury_weeks_remaining
+        FROM depth_chart dc
+        JOIN player p ON dc.player_id = p.id
+        WHERE dc.team_id = ?
+          AND dc.season_year = ?
+          AND dc.slot_order = 1
+          AND p.injury_status IN ({placeholders})
+    """, (team_id, season_year, *AUTO_PROMOTE_INJURY_STATUSES)).fetchall()
+
+
+def get_depth_chart_restore_candidates(conn: sqlite3.Connection, team_id: int,
+                                        season_year: int) -> list[sqlite3.Row]:
+    """Find depth chart entries where replaced_player_id is set and that player is now healthy.
+    Returns entries that should be restored (original starter healed)."""
+    return conn.execute("""
+        SELECT dc.*, p.injury_status as replaced_player_injury_status
+        FROM depth_chart dc
+        JOIN player p ON dc.replaced_player_id = p.id
+        WHERE dc.team_id = ?
+          AND dc.season_year = ?
+          AND dc.replaced_player_id IS NOT NULL
+          AND (p.injury_status IS NULL OR p.injury_status = 'Healthy')
+    """, (team_id, season_year)).fetchall()
