@@ -291,6 +291,60 @@ TEMPLATES = [
             'confrontational': "If you're healthy enough to practice, you're healthy enough to play.",
         },
     },
+
+    # -------------------------------------------------------
+    # lineup_controversy — Phase 5 Prompt #5
+    # -------------------------------------------------------
+    {
+        'id': 'lineup_controversy_1',
+        'context': 'lineup_controversy',
+        'question': "Coach, a healthy starter was benched today in favor of a backup with a significantly lower grade. Can you walk us through that decision?",
+        'responses': {
+            'deflect':         "I make the decisions I think give us the best chance to win. That's it.",
+            'accountable':     "I saw something in practice this week that gave me confidence in the change.",
+            'confrontational': "I coach to win, not to manage reputations. Some calls are hard.",
+        },
+    },
+    {
+        'id': 'lineup_controversy_2',
+        'context': 'lineup_controversy',
+        'question': "There's a lot of surprise in the locker room about today's lineup. A healthy, high-rated starter is not starting. What's your message to the team?",
+        'responses': {
+            'deflect':         "The message is always the same: compete, and the best player plays.",
+            'accountable':     "I understand the surprise. I owe the guys an honest explanation in the meeting room.",
+            'confrontational': "If anyone has a problem with how I set the lineup, they can come see me directly.",
+        },
+    },
+    {
+        'id': 'lineup_controversy_3',
+        'context': 'lineup_controversy',
+        'question': "Fans are asking whether this lineup decision is about performance or something off the field. Can you clarify?",
+        'responses': {
+            'deflect':         "My lineup decisions are football decisions. Full stop.",
+            'accountable':     "It's purely football. I should have communicated it better beforehand.",
+            'confrontational': "I'm not going to justify my roster moves to social media.",
+        },
+    },
+    {
+        'id': 'lineup_controversy_4',
+        'context': 'lineup_controversy',
+        'question': "Has the benched player been told why he's not starting, and how did he respond?",
+        'responses': {
+            'deflect':         "Those conversations stay in-house.",
+            'accountable':     "Yes, we talked. It wasn't easy, but he deserved honesty.",
+            'confrontational': "Every player on this roster knows where they stand. No surprises.",
+        },
+    },
+    {
+        'id': 'lineup_controversy_5',
+        'context': 'lineup_controversy',
+        'question': "Is this a one-game decision, or a change in the depth chart going forward?",
+        'responses': {
+            'deflect':         "We evaluate everything week to week.",
+            'accountable':     "Right now it's this week. We'll see what the player does with the reps.",
+            'confrontational': "The depth chart reflects performance. It stays until performance changes.",
+        },
+    },
 ]
 
 

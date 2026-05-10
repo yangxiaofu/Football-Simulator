@@ -17,6 +17,9 @@ from ..utils.constants import (
     TIER2_TRIGGER_PRIORITY,
     PLAYOFF_WEEK_TO_ROUND_MAP,
     REGULAR_SEASON_WEEKS,
+    TIER2_EVENT_RISING_STAR_STREAK,
+    STREAK_LENGTH_WEEKS,
+    STREAK_AWARD_TYPES,
 )
 
 
@@ -378,6 +381,88 @@ def detect_losing_streak_3(
     })
 
 
+def detect_rising_star_streak(
+    conn: sqlite3.Connection,
+    team_id: int,
+    season_year: int,
+    week_number: int,
+) -> Tuple[bool, dict]:
+    """Fire on the EXACT week a user-team player hits STREAK_LENGTH_WEEKS consecutive league stars.
+
+    Fires only on the 3rd consecutive week (not on week 4, 5, 6 of the same streak).
+    Uses a W-3 award check to prevent re-fire on streak extensions.
+    Guard key provides idempotency if dispatcher is called twice for the same week.
+    """
+    from ..db.queries import get_user_team_weekly_awards, get_player, get_league_state
+
+    league = get_league_state(conn)
+    if not league or league['user_team_id'] != team_id:
+        return (False, {})
+
+    if week_number < STREAK_LENGTH_WEEKS:
+        return (False, {})
+
+    streak_weeks = list(range(week_number - STREAK_LENGTH_WEEKS + 1, week_number + 1))
+    awards = get_user_team_weekly_awards(
+        conn, team_id, season_year, streak_weeks, list(STREAK_AWARD_TYPES)
+    )
+
+    # Group by player_id: which weeks did each player win?
+    by_player: dict = {}
+    for row in awards:
+        by_player.setdefault(row['player_id'], set()).add(row['week_number'])
+
+    for player_id, weeks_won in by_player.items():
+        if not set(streak_weeks).issubset(weeks_won):
+            continue  # player didn't win all 3 streak weeks
+
+        # Check week W-3: if also won then, this is ≥ week 4 of an older streak — skip
+        pre_week = week_number - STREAK_LENGTH_WEEKS
+        if pre_week >= 1:
+            pre_awards = get_user_team_weekly_awards(
+                conn, team_id, season_year, [pre_week], list(STREAK_AWARD_TYPES)
+            )
+            if any(r['player_id'] == player_id for r in pre_awards):
+                continue  # continuation of older streak; only fire on week 3
+
+        streak_start = streak_weeks[0]
+        guard_key = f"rss_{player_id}_{streak_start}"
+        if is_trigger_guarded(conn, team_id, season_year, TIER2_EVENT_RISING_STAR_STREAK, guard_key):
+            continue
+
+        player = get_player(conn, player_id)
+        player_name = (
+            f"{player['first_name']} {player['last_name']}" if player else "Unknown"
+        )
+
+        # Find award type for the current week (determines category label)
+        current_week_awards = [r for r in awards
+                                if r['player_id'] == player_id
+                                and r['week_number'] == week_number]
+        current_award_type = current_week_awards[0]['award_type'] if current_week_awards else 'OFFENSE'
+        category = _award_type_to_label(current_award_type)
+
+        return (True, {
+            'guard_key': guard_key,
+            'player_id': player_id,
+            'star_name': player_name,
+            'player_name': player_name,
+            'position': player['position'] if player else '',
+            'streak_length': str(STREAK_LENGTH_WEEKS),
+            'category': category,
+        })
+
+    return (False, {})
+
+
+def _award_type_to_label(award_type: str) -> str:
+    return {
+        'OFFENSE': 'Offensive Player of the Week',
+        'DEFENSE': 'Defensive Player of the Week',
+        'SPECIAL_TEAMS': 'Special Teams Player of the Week',
+    }.get(award_type, 'Player of the Week')
+
+
 # ============================================================
 # ORCHESTRATOR
 # ============================================================
@@ -391,6 +476,7 @@ _DETECTOR_MAP = {
     'blown_lead': detect_blown_lead,
     'holdout_public': detect_holdout_public,
     'losing_streak_3': detect_losing_streak_3,
+    TIER2_EVENT_RISING_STAR_STREAK: detect_rising_star_streak,
 }
 
 

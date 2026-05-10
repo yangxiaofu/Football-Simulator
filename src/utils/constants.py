@@ -1776,6 +1776,18 @@ STARS_AWARD_DEFENSE = 'DEFENSE'
 STARS_AWARD_SPECIAL_TEAMS = 'SPECIAL_TEAMS'
 STARS_AWARD_USER_TEAM_MVP = 'USER_TEAM_MVP'
 
+# Phase 5 Prompt #5 — Tier 2 streak trigger (design doc §4.7)
+STREAK_LENGTH_WEEKS = 3
+STREAK_AWARD_TYPES = ('OFFENSE', 'DEFENSE', 'SPECIAL_TEAMS')
+TIER2_EVENT_RISING_STAR_STREAK = 'rising_star_streak'
+
+# Phase 5 Prompt #5 — Lineup controversy thresholds (design doc §2.5)
+LINEUP_CONTROVERSY_A_GRADE_THRESHOLD = 90   # outgoing starter true_overall >= this
+LINEUP_CONTROVERSY_C_GRADE_THRESHOLD = 76   # incoming player true_overall <= this
+LINEUP_CONTROVERSY_SENTIMENT_DELTA = -3
+LINEUP_CONTROVERSY_SENTIMENT_REASON_CODE = 'lineup_controversy'
+TIER1_CONTEXT_LINEUP_CONTROVERSY = 'lineup_controversy'
+
 
 # ======================
 # LEADERBOARD DISPLAY (Phase 5 Prompt #2)
@@ -2076,6 +2088,7 @@ TIER2_TRIGGER_PRIORITY = (
     'blown_lead',
     'holdout_public',
     'losing_streak_3',
+    'rising_star_streak',  # Phase 5 P5 — lowest drama priority
 )
 
 

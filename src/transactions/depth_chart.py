@@ -13,11 +13,15 @@ from src.db.queries import (
     upsert_depth_chart_entry, delete_depth_chart_entry, clear_depth_chart_for_team,
     get_positions_for_player, get_injured_starters, get_depth_chart_restore_candidates,
     get_player, get_team, insert_player_event, get_team_roster,
+    get_league_state, get_player_active_injury, log_lineup_controversy,
+    update_sentiment_drivers,
 )
 from src.utils.constants import (
     DEPTH_CHART_POSITIONS, DEPTH_CHART_TO_PLAYER_POSITION,
     FLEXIBLE_POSITION_EQUIVALENTS, OUT_OF_POSITION_SAR_PENALTY,
     MAX_DEPTH_PER_POSITION, AUTO_PROMOTE_INJURY_STATUSES,
+    LINEUP_CONTROVERSY_A_GRADE_THRESHOLD, LINEUP_CONTROVERSY_C_GRADE_THRESHOLD,
+    LINEUP_CONTROVERSY_SENTIMENT_DELTA,
 )
 
 
@@ -63,8 +67,8 @@ def validate_player_eligibility(conn: sqlite3.Connection, player_id: int,
     if player['team_id'] != team_id:
         return False, f"Player {player['first_name']} {player['last_name']} not on team"
 
-    if player['contract_status'] not in ('signed', 'franchise_tagged'):
-        return False, f"Player not under contract (status: {player['contract_status']})"
+    if not player['is_active']:
+        return False, f"Player {player['first_name']} {player['last_name']} is not active"
 
     return True, ""
 
@@ -106,6 +110,11 @@ def set_depth_chart_entry(conn: sqlite3.Connection, team_id: int, season_year: i
             continue
         return False, f"Player already assigned to {assignment['position_slot']} slot {assignment['slot_order']}"
 
+    # Capture outgoing starter BEFORE the upsert (after upsert it's overwritten)
+    outgoing_entry = None
+    if slot_order == 1 and is_user_set:
+        outgoing_entry = get_starter_for_position(conn, team_id, season_year, position_slot)
+
     # Insert or update
     with conn:
         upsert_depth_chart_entry(
@@ -113,8 +122,68 @@ def set_depth_chart_entry(conn: sqlite3.Connection, team_id: int, season_year: i
             is_user_set=1 if is_user_set else 0, replaced_player_id=None, notes=notes
         )
 
+    # Phase 5 P5: lineup controversy detection (user-set starters only)
+    if slot_order == 1 and is_user_set:
+        _maybe_queue_lineup_controversy(
+            conn, team_id, position_slot, player_id, season_year, outgoing_entry
+        )
+
     player = get_player(conn, player_id)
     return True, f"Set {player['first_name']} {player['last_name']} as {position_slot} #{slot_order}"
+
+
+def _maybe_queue_lineup_controversy(
+    conn: sqlite3.Connection,
+    team_id: int,
+    position_slot: str,
+    incoming_player_id: int,
+    season_year: int,
+    outgoing_entry,  # depth_chart row captured before the upsert, or None
+) -> None:
+    """Log a lineup controversy event if an extreme A→C demotion is detected.
+
+    Fires when ALL conditions are true:
+    - team is the user's team
+    - outgoing starter has true_overall >= LINEUP_CONTROVERSY_A_GRADE_THRESHOLD
+    - outgoing starter has no active injury
+    - incoming player has true_overall <= LINEUP_CONTROVERSY_C_GRADE_THRESHOLD
+    """
+    if not outgoing_entry:
+        return  # no existing starter to demote
+
+    league = get_league_state(conn)
+    if not league or league['user_team_id'] != team_id:
+        return
+
+    # Get full player record for outgoing (depth_chart row has player_id, not true_overall)
+    outgoing = get_player(conn, outgoing_entry['player_id'])
+    if not outgoing:
+        return
+
+    if outgoing['true_overall'] < LINEUP_CONTROVERSY_A_GRADE_THRESHOLD:
+        return
+
+    if get_player_active_injury(conn, outgoing['id']):
+        return  # outgoing is injured — not a controversy
+
+    incoming = get_player(conn, incoming_player_id)
+    if not incoming:
+        return
+
+    if incoming['true_overall'] > LINEUP_CONTROVERSY_C_GRADE_THRESHOLD:
+        return
+
+    # All conditions met — log controversy and apply sentiment delta
+    week_number = league['current_week']
+    description = (
+        f"Lineup controversy: benched {outgoing['first_name']} {outgoing['last_name']} "
+        f"(OVR {outgoing['true_overall']}) for "
+        f"{incoming['first_name']} {incoming['last_name']} "
+        f"(OVR {incoming['true_overall']}) at {position_slot}"
+    )
+    with conn:
+        log_lineup_controversy(conn, team_id, outgoing['id'], season_year, week_number, description)
+        update_sentiment_drivers(conn, team_id, season_year, presser_delta=LINEUP_CONTROVERSY_SENTIMENT_DELTA)
 
 
 def swap_depth_chart_positions(conn: sqlite3.Connection, team_id: int, season_year: int,

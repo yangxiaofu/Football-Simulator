@@ -48,6 +48,7 @@ def get_connection(save_path: str) -> sqlite3.Connection:
     ensure_tier2_press_tables(conn)
     ensure_narrative_moment_table(conn)
     ensure_in_season_stats_tables(conn)
+    ensure_depth_chart_table(conn)
 
     return conn
 
@@ -1251,6 +1252,44 @@ def ensure_in_season_stats_tables(conn: sqlite3.Connection) -> None:
         ON weekly_award(player_id, season_year)
     """)
 
+    conn.commit()
+
+
+def ensure_depth_chart_table(conn: sqlite3.Connection) -> None:
+    """
+    Create depth_chart table if it doesn't exist.
+
+    Safe to call multiple times. Used for migrating existing save files
+    that were created before the depth chart system was added (Phase 5 Prompt #3).
+
+    Args:
+        conn: Database connection
+    """
+    cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='depth_chart'")
+    if cursor.fetchone():
+        return  # Already exists
+
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS depth_chart (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            team_id INTEGER NOT NULL,
+            season_year INTEGER NOT NULL,
+            position_slot TEXT NOT NULL,
+            slot_order INTEGER NOT NULL,
+            player_id INTEGER NOT NULL,
+            is_user_set INTEGER NOT NULL DEFAULT 0,
+            replaced_player_id INTEGER,
+            notes TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (team_id) REFERENCES team(id) ON DELETE CASCADE,
+            FOREIGN KEY (player_id) REFERENCES player(id) ON DELETE CASCADE,
+            FOREIGN KEY (replaced_player_id) REFERENCES player(id) ON DELETE SET NULL,
+            UNIQUE(team_id, season_year, position_slot, slot_order)
+        );
+        CREATE INDEX IF NOT EXISTS idx_depth_chart_team_season ON depth_chart(team_id, season_year);
+        CREATE INDEX IF NOT EXISTS idx_depth_chart_player ON depth_chart(player_id);
+        CREATE INDEX IF NOT EXISTS idx_depth_chart_position ON depth_chart(team_id, season_year, position_slot);
+    """)
     conn.commit()
 
 

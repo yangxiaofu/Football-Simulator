@@ -58,6 +58,12 @@ def detect_context(
     Returns:
         Context type string
     """
+    # Phase 5 P5: lineup controversy takes highest priority
+    from ..db.queries import check_lineup_controversy_queued
+    from ..utils.constants import TIER1_CONTEXT_LINEUP_CONTROVERSY
+    if check_lineup_controversy_queued(conn, team_id, season_year, week_number):
+        return TIER1_CONTEXT_LINEUP_CONTROVERSY
+
     # Get this week's game result
     game = conn.execute("""
         SELECT

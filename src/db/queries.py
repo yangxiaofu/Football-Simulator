@@ -4417,3 +4417,77 @@ def get_depth_chart_restore_candidates(conn: sqlite3.Connection, team_id: int,
           AND dc.replaced_player_id IS NOT NULL
           AND (p.injury_status IS NULL OR p.injury_status = 'Healthy')
     """, (team_id, season_year)).fetchall()
+
+
+# ============================================================
+# Phase 5 Prompt #5 — Streak + Lineup Controversy
+# ============================================================
+
+def get_user_team_weekly_awards(
+    conn: sqlite3.Connection,
+    team_id: int,
+    season_year: int,
+    week_numbers: list,
+    award_types: list,
+) -> list[dict]:
+    """Return weekly_award rows for the given team, weeks, and award types."""
+    if not week_numbers or not award_types:
+        return []
+    week_placeholders = ','.join('?' * len(week_numbers))
+    type_placeholders = ','.join('?' * len(award_types))
+    rows = conn.execute(f"""
+        SELECT week_number, player_id, award_type
+        FROM weekly_award
+        WHERE team_id = ? AND season_year = ? AND is_playoff = 0
+          AND week_number IN ({week_placeholders})
+          AND award_type IN ({type_placeholders})
+        ORDER BY week_number ASC
+    """, (team_id, season_year, *week_numbers, *award_types)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_player_active_injury(
+    conn: sqlite3.Connection,
+    player_id: int,
+) -> 'Optional[sqlite3.Row]':
+    """Return player row if the player has an active injury, else None.
+
+    Active = injury_status IS NOT NULL and injury_weeks_remaining > 0.
+    """
+    return conn.execute("""
+        SELECT id FROM player
+        WHERE id = ? AND injury_status IS NOT NULL AND injury_weeks_remaining > 0
+        LIMIT 1
+    """, (player_id,)).fetchone()
+
+
+def log_lineup_controversy(
+    conn: sqlite3.Connection,
+    team_id: int,
+    player_id: int,
+    season_year: int,
+    week_number: int,
+    description: str,
+) -> None:
+    """Log a lineup controversy event to transaction_log."""
+    conn.execute("""
+        INSERT INTO transaction_log
+            (season_year, week_number, transaction_type, team_id, player_id, description, cap_impact)
+        VALUES (?, ?, 'lineup_controversy', ?, ?, ?, 0)
+    """, (season_year, week_number, team_id, player_id, description))
+
+
+def check_lineup_controversy_queued(
+    conn: sqlite3.Connection,
+    team_id: int,
+    season_year: int,
+    week_number: int,
+) -> bool:
+    """Return True if a lineup_controversy was logged for this team/week."""
+    row = conn.execute("""
+        SELECT 1 FROM transaction_log
+        WHERE team_id = ? AND season_year = ? AND week_number = ?
+          AND transaction_type = 'lineup_controversy'
+        LIMIT 1
+    """, (team_id, season_year, week_number)).fetchone()
+    return row is not None

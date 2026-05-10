@@ -351,6 +351,28 @@ CREATE TABLE IF NOT EXISTS player_event (
 CREATE INDEX IF NOT EXISTS idx_player_event_player ON player_event(player_id, season_year);
 CREATE INDEX IF NOT EXISTS idx_player_event_team ON player_event(team_id, season_year);
 
+-- Phase 5 Prompt #3: Explicit depth chart for user-controlled lineup management
+CREATE TABLE IF NOT EXISTS depth_chart (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    team_id INTEGER NOT NULL,
+    season_year INTEGER NOT NULL,
+    position_slot TEXT NOT NULL,  -- 'QB', 'RB', 'WR1', 'WR2', 'LT', 'MLB', 'CB1', etc.
+    slot_order INTEGER NOT NULL,  -- 1=starter, 2=backup1, 3=backup2
+    player_id INTEGER NOT NULL,
+    is_user_set INTEGER NOT NULL DEFAULT 0,  -- 0=auto-filled, 1=user explicitly chose
+    replaced_player_id INTEGER,  -- Original starter when auto-promoted due to injury
+    notes TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (team_id) REFERENCES team(id) ON DELETE CASCADE,
+    FOREIGN KEY (player_id) REFERENCES player(id) ON DELETE CASCADE,
+    FOREIGN KEY (replaced_player_id) REFERENCES player(id) ON DELETE SET NULL,
+    UNIQUE(team_id, season_year, position_slot, slot_order)  -- One player per slot
+);
+
+CREATE INDEX IF NOT EXISTS idx_depth_chart_team_season ON depth_chart(team_id, season_year);
+CREATE INDEX IF NOT EXISTS idx_depth_chart_player ON depth_chart(player_id);
+CREATE INDEX IF NOT EXISTS idx_depth_chart_position ON depth_chart(team_id, season_year, position_slot);
+
 CREATE TABLE IF NOT EXISTS trade (
     id              INTEGER PRIMARY KEY,
     season_year     INTEGER NOT NULL,

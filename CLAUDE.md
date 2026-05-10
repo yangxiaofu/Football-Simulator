@@ -340,7 +340,12 @@ Goal: Weekly stat aggregation, leaderboards, Stars of the Week, and enhanced med
   - `weekly_award` table populated after each regular-season and playoff week
   - Auto-print in weekly summary (season.py + playoffs.py); `view_stats.py --stars [--week N]` renders real data
   - Verification: `python tests/verify/verify_phase5_p4.py` (13 checks including 4 mandatory guards)
-- [ ] **Prompt #5**: TBD
+- [x] **Prompt #5**: Tier 2 Streak Trigger + Lineup Controversy
+  - `rising_star_streak` Tier 2 trigger: fires on week 3 of consecutive league-wide star wins (idempotent, W-3 guard)
+  - `lineup_controversy` Tier 1 context: queued via `transaction_log` when healthy A-grade starter replaced by C-grade
+  - 3 Tier 2 templates (`src/utils/tier2_templates.py`), 5 Tier 1 templates (`src/utils/press_templates.py`)
+  - Owner sentiment delta (-3) on controversy via `update_sentiment_drivers`
+  - Verification: `python tests/verify/verify_phase5_p5.py` (15/15)
 
 **Phase 5 In Progress...**
 

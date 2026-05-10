@@ -96,6 +96,13 @@ def main():
             print(f"✓ Generated {total_staff} staff members")
             print()
 
+            print("Initializing depth charts for all teams...")
+            from src.transactions.depth_chart import initialize_depth_chart_for_team
+            for team_id in team_ids:
+                initialize_depth_chart_for_team(conn, team_id, season_year)
+            print(f"✓ Initialized depth charts for {len(team_ids)} teams")
+            print()
+
             print("Generating regular season schedule...")
             # Get season_id
             season_row = conn.execute("SELECT id FROM season WHERE year = ?", (season_year,)).fetchone()

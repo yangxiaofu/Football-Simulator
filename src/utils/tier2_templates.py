@@ -648,6 +648,93 @@ TIER2_TEMPLATES = [
             },
         ],
     },
+
+    # -------------------------------------------------------
+    # rising_star_streak — Phase 5 Prompt #5
+    # -------------------------------------------------------
+    {
+        'id': 'rss_three_consecutive_A',
+        'trigger': 'rising_star_streak',
+        'questions': [
+            {
+                'question': (
+                    "{star_name} has now been named {category} for the third straight week. "
+                    "The league is watching. Is this the breakout season you knew was coming?"
+                ),
+                'responses': {
+                    'deflect':         "We're just focused on winning games. He's doing his job.",
+                    'accountable':     "I'll be honest — even I didn't expect this level of consistency. He's earned it.",
+                    'confrontational': "He's been this good since camp. The league is just catching up.",
+                },
+            },
+            {
+                'question': (
+                    "Three weeks in a row. How do you keep {star_name} motivated "
+                    "without letting the hype become a distraction?"
+                ),
+                'responses': {
+                    'deflect':         "Film room, practice reps, preparation — same as always.",
+                    'accountable':     "It's a real challenge. We're having that conversation internally.",
+                    'confrontational': "He's a professional. He doesn't need managing.",
+                },
+            },
+        ],
+    },
+    {
+        'id': 'rss_three_consecutive_B',
+        'trigger': 'rising_star_streak',
+        'questions': [
+            {
+                'question': (
+                    "{star_name} is on a historic run — {category} three weeks in a row. "
+                    "Does this change your game plan going forward?"
+                ),
+                'responses': {
+                    'deflect':         "Every week is its own challenge. We don't build around streaks.",
+                    'accountable':     "You'd be lying if you said you don't feature your hot hand. Of course we do.",
+                    'confrontational': "He's been our best player. Game plans should reflect that.",
+                },
+            },
+            {
+                'question': (
+                    "Is there any concern that opposing defenses will start scheming specifically for {star_name}?"
+                ),
+                'responses': {
+                    'deflect':         "Every good player gets extra attention. That's football.",
+                    'accountable':     "Yes, and we have to be ready to adjust. That's the real test.",
+                    'confrontational': "Let them try. He'll still find a way to beat it.",
+                },
+            },
+        ],
+    },
+    {
+        'id': 'rss_three_consecutive_C',
+        'trigger': 'rising_star_streak',
+        'questions': [
+            {
+                'question': (
+                    "Three consecutive weeks as {category}. "
+                    "What does this streak say about the program you're building?"
+                ),
+                'responses': {
+                    'deflect':         "It says our players work hard. That's about the sum of it.",
+                    'accountable':     "It tells me the development system we've built is real. I'm proud of that.",
+                    'confrontational': "It says we evaluate talent better than most. That's not an accident.",
+                },
+            },
+            {
+                'question': (
+                    "With {star_name} playing at this level, "
+                    "does the contract picture change heading into the offseason?"
+                ),
+                'responses': {
+                    'deflect':         "We don't negotiate contracts through the press.",
+                    'accountable':     "Any player who performs like that earns a closer look at their deal.",
+                    'confrontational': "He's underpaid and he knows it. We'll make it right.",
+                },
+            },
+        ],
+    },
 ]
 
 
