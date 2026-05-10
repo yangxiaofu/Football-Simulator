@@ -13,9 +13,11 @@ from ..utils.constants import (
     CONFERENCE_NAMES, DIVISION_NAMES, GM_PERSONALITIES,
     STADIUM_TYPES, CLIMATE_TYPES,
     PRESTIGE_MIN, PRESTIGE_MAX, MARKET_SIZE_MIN, MARKET_SIZE_MAX,
-    FAN_SENTIMENT_DEFAULT, SALARY_CAP_YEAR_ONE
+    FAN_SENTIMENT_DEFAULT, SALARY_CAP_YEAR_ONE,
+    COACH_MIN_AGE, COACH_MAX_AGE,
 )
-from .names import TEAM_CITIES, TEAM_NICKNAMES, TEAM_ABBREVIATIONS
+from ..transactions.coaching import assign_coach_to_team
+from .names import TEAM_CITIES, TEAM_NICKNAMES, TEAM_ABBREVIATIONS, FIRST_NAMES, LAST_NAMES
 
 
 def generate_conferences_and_divisions(conn: sqlite3.Connection) -> dict:
@@ -186,3 +188,49 @@ def generate_all_teams(conn: sqlite3.Connection, season_year: int = 2024) -> Lis
     initialize_season(conn, season_year)
 
     return team_ids
+
+
+def generate_ai_coaches(
+    conn: sqlite3.Connection,
+    season_year: int,
+    team_ids: List[int],
+    skip_team_id: int = None,
+) -> List[int]:
+    """
+    Generate one AI coach per team, matching each team's current gm_personality.
+
+    Args:
+        conn: Database connection (must be in transaction)
+        season_year: Starting season year
+        team_ids: List of team IDs to generate coaches for
+        skip_team_id: Optional team ID to skip (e.g., user's team will get player coach)
+
+    Returns:
+        List of coach_career IDs created
+    """
+    coach_ids = []
+
+    for team_id in team_ids:
+        if skip_team_id is not None and team_id == skip_team_id:
+            continue
+        team = conn.execute(
+            "SELECT gm_personality FROM team WHERE id = ?", (team_id,)
+        ).fetchone()
+
+        first_name = random.choice(FIRST_NAMES)
+        last_name = random.choice(LAST_NAMES)
+        age = random.randint(COACH_MIN_AGE, COACH_MAX_AGE)
+        archetype = team['gm_personality']
+
+        cursor = conn.execute(
+            """INSERT INTO coach_career
+               (first_name, last_name, age, personality_archetype,
+                career_start_year, is_player, is_active)
+               VALUES (?, ?, ?, ?, ?, 0, 1)""",
+            (first_name, last_name, age, archetype, season_year)
+        )
+        coach_id = cursor.lastrowid
+        assign_coach_to_team(conn, coach_id, team_id, season_year)
+        coach_ids.append(coach_id)
+
+    return coach_ids

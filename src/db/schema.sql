@@ -729,17 +729,23 @@ CREATE TABLE IF NOT EXISTS legacy_score (
     -- Composite
     total_legacy_score      INTEGER NOT NULL DEFAULT 0,
     is_dynasty              INTEGER NOT NULL DEFAULT 0,   -- 3+ SBs in 10-season window
-    hof_eligible            INTEGER NOT NULL DEFAULT 0
+    hof_eligible            INTEGER NOT NULL DEFAULT 0,
+
+    -- Coach identity (Phase 4)
+    coach_id                INTEGER,
+    FOREIGN KEY (coach_id) REFERENCES coach_career(id)
 );
 
 CREATE TABLE IF NOT EXISTS hall_of_fame (
     id                  INTEGER PRIMARY KEY,
     player_id           INTEGER,
     staff_id            INTEGER,
+    coach_id            INTEGER,             -- Phase 4: coach identity
     inducted_season     INTEGER NOT NULL,
     induction_speech    TEXT,                -- generated narrative
     FOREIGN KEY (player_id) REFERENCES player(id),
-    FOREIGN KEY (staff_id) REFERENCES staff(id)
+    FOREIGN KEY (staff_id) REFERENCES staff(id),
+    FOREIGN KEY (coach_id) REFERENCES coach_career(id)
 );
 
 -- ====================
@@ -911,3 +917,36 @@ CREATE TABLE IF NOT EXISTS offseason_state (
     UNIQUE(team_id, season_year)
 );
 CREATE INDEX IF NOT EXISTS idx_offseason_state_team ON offseason_state(team_id, season_year);
+
+-- ====================
+-- 8. COACH IDENTITY (Phase 4)
+-- ====================
+
+CREATE TABLE IF NOT EXISTS coach_career (
+    id                    INTEGER PRIMARY KEY,
+    first_name            TEXT NOT NULL,
+    last_name             TEXT NOT NULL,
+    age                   INTEGER NOT NULL,
+    personality_archetype TEXT NOT NULL,
+    career_start_year     INTEGER NOT NULL,
+    current_team_id       INTEGER,
+    is_player             INTEGER NOT NULL DEFAULT 0,
+    is_active             INTEGER NOT NULL DEFAULT 1,
+    FOREIGN KEY (current_team_id) REFERENCES team(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_coach_career_active ON coach_career(is_active, is_player);
+CREATE INDEX IF NOT EXISTS idx_coach_career_team ON coach_career(current_team_id);
+
+CREATE TABLE IF NOT EXISTS coach_tenure (
+    id              INTEGER PRIMARY KEY,
+    coach_id        INTEGER NOT NULL,
+    team_id         INTEGER NOT NULL,
+    start_year      INTEGER NOT NULL,
+    end_year        INTEGER,
+    end_reason      TEXT,
+    FOREIGN KEY (coach_id) REFERENCES coach_career(id),
+    FOREIGN KEY (team_id) REFERENCES team(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_coach_tenure_coach ON coach_tenure(coach_id, end_year);

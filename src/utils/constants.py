@@ -1726,3 +1726,35 @@ def from_letter_grade(grade: str) -> int:
         "F": 50,
     }
     return grade_midpoints.get(grade, 50)
+
+
+# ==============================
+# COACH IDENTITY (Phase 4)
+# ==============================
+COACH_MIN_AGE = 35
+COACH_MAX_AGE = 65
+DEFAULT_PLAYER_COACH_FIRST_NAME = "Head"
+DEFAULT_PLAYER_COACH_LAST_NAME = "Coach"
+DEFAULT_PLAYER_COACH_ARCHETYPE = "analytics"
+
+COACH_TENURE_END_REASONS = ('fired', 'resigned', 'mutual', 'championship_walkout', 'current', 'replaced')
+GM_PERSONALITIES_TUPLE = ('draft_purist', 'win_now', 'analytics', 'loyalty', 'opportunist')
+
+
+# ==============================
+# STRESS HARNESS (Phase 4)
+# ==============================
+STRESS_TEST_DEFAULT_SEASONS = 3
+STRESS_TEST_SMOKE_SEASONS = 10
+STRESS_TEST_TIMEOUT_SECONDS_PER_SEASON = 300
+
+MAX_CAP_OVERAGE_TOLERANCE = 0
+MIN_RETIREMENT_RATE = 0.08
+
+HEALTH_STAR_RATING_THRESHOLD = 90
+HEALTH_AGE_BUCKETS = [(20, 24), (25, 28), (29, 32), (33, 99)]
+HEALTH_CAP_BUCKETS = [
+    ('healthy', 30_000_000, float('inf')),
+    ('tight', 0, 30_000_000),
+    ('over', float('-inf'), 0),
+]

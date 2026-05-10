@@ -481,7 +481,18 @@ def _execute_phase_on_leave(
         }
 
     if phase == 'training_camp':
-        return enforce_roster_cuts(team_id, season_year, conn)
+        # Apply roster cuts for ALL teams (not just user team)
+        # This was previously gated to only team_id (user team), causing AI roster bloat
+        teams = get_all_teams(conn)
+        total_cuts = 0
+        for team in teams:
+            result = enforce_roster_cuts(team['id'], season_year, conn)
+            total_cuts += len(result.get('players_cut', []))
+
+        return {
+            'total_players_cut': total_cuts,
+            'teams_processed': len(teams),
+        }
 
     return {}
 

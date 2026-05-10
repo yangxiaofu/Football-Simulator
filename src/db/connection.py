@@ -39,6 +39,7 @@ def get_connection(save_path: str) -> sqlite3.Connection:
     ensure_scouting_tables(conn)
     ensure_draft_tables(conn)
     ensure_offseason_state_table(conn)
+    ensure_coach_tables(conn)
 
     return conn
 
@@ -561,6 +562,62 @@ def ensure_offseason_state_table(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_offseason_state_team
         ON offseason_state(team_id, season_year)
     """)
+    conn.commit()
+
+
+def ensure_coach_tables(conn: sqlite3.Connection) -> None:
+    """
+    Create coach identity tables if they don't exist.
+
+    Safe to call multiple times. Used for migrating existing save files
+    that were created before the coach identity system was added (Phase 4).
+
+    Args:
+        conn: Database connection
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS coach_career (
+            id                    INTEGER PRIMARY KEY,
+            first_name            TEXT NOT NULL,
+            last_name             TEXT NOT NULL,
+            age                   INTEGER NOT NULL,
+            personality_archetype TEXT NOT NULL,
+            career_start_year     INTEGER NOT NULL,
+            current_team_id       INTEGER,
+            is_player             INTEGER NOT NULL DEFAULT 0,
+            is_active             INTEGER NOT NULL DEFAULT 1,
+            FOREIGN KEY (current_team_id) REFERENCES team(id)
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_coach_career_active
+        ON coach_career(is_active, is_player)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_coach_career_team
+        ON coach_career(current_team_id)
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS coach_tenure (
+            id              INTEGER PRIMARY KEY,
+            coach_id        INTEGER NOT NULL,
+            team_id         INTEGER NOT NULL,
+            start_year      INTEGER NOT NULL,
+            end_year        INTEGER,
+            end_reason      TEXT,
+            FOREIGN KEY (coach_id) REFERENCES coach_career(id),
+            FOREIGN KEY (team_id) REFERENCES team(id)
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_coach_tenure_coach
+        ON coach_tenure(coach_id, end_year)
+    """)
+
+    # Add coach_id column to legacy_score and hall_of_fame for existing saves
+    _safe_add_column(conn, 'legacy_score', 'coach_id', 'INTEGER REFERENCES coach_career(id)')
+    _safe_add_column(conn, 'hall_of_fame', 'coach_id', 'INTEGER REFERENCES coach_career(id)')
+
     conn.commit()
 
 

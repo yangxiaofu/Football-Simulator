@@ -48,6 +48,10 @@ from .trades import (
     check_trade_deadline,
 )
 
+from .coaching import (
+    assign_coach_to_team,
+)
+
 __all__ = [
     'calculate_cap_hit',
     'calculate_dead_cap',
@@ -76,4 +80,5 @@ __all__ = [
     'execute_trade',
     'receive_trade_offers',
     'check_trade_deadline',
+    'assign_coach_to_team',
 ]

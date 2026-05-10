@@ -12,6 +12,10 @@
 # click>=8.0.0               # Better CLI interface
 # rich>=13.0.0               # Terminal formatting and progress bars
 #
+# Phase 5 (Steam UI — locked 2026-05-09, see docs/ui/00_framework_selection.md):
+# pywebview>=5.0             # Native window with embedded web view (HTML/CSS/JS frontend)
+# pyinstaller>=6.0           # Steam .exe packaging
+#
 # Testing:
 # pytest>=7.4.0              # Unit testing framework
 # pytest-cov>=4.1.0          # Coverage reporting

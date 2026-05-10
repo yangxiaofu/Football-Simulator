@@ -26,12 +26,15 @@ Save format: One `.db` file per franchise (SQLite database)
 ├── simulate_game.py       ← CLI: simulate a single game or batch
 ├── run_season.py          ← CLI: season management (Phase 2)
 ├── run_offseason.py       ← CLI: offseason management (Phase 3)
+├── verify_phase4_p1.py    ← verification: Phase 4 prompt #1 (coach identity)
+├── run_stress_test.py     ← CLI: multi-season stress test (Phase 4)
 ├── docs/                  ← Game Design Documents (read before implementing any system)
 │   ├── GDD_Layer1_CoreDesign.md
 │   ├── GDD_Layer2_SimulationSpec.md
 │   ├── GDD_Layer2B_TransactionOffseason.md
 │   ├── GDD_Layer3_DataModel.md
-│   └── GDD_Layer4_FeatureRoadmap.md
+│   ├── GDD_Layer4_FeatureRoadmap.md
+│   └── Phase4_StressTest_BaselineFindings.md
 ├── src/                   ← all Python source code
 │   ├── db/                ← schema, migrations, connection helpers
 │   │   ├── schema.sql           ← full SQLite schema
@@ -63,14 +66,18 @@ Save format: One `.db` file per franchise (SQLite database)
 │   │   ├── development.py       ← player development and aging logic
 │   │   ├── awards.py            ← MVP, Pro Bowl, All-Pro calculations
 │   │   ├── legacy.py            ← legacy score and dynasty tracking
-│   │   └── offseason.py         ← offseason loop orchestrator, phase sequencing
-│   ├── transactions/      ← trades, free agency, contracts, draft
+│   │   ├── offseason.py         ← offseason loop orchestrator, phase sequencing
+│   │   ├── invariants.py        ← 12-invariant battery
+│   │   ├── health_report.py     ← League Health Report generator
+│   │   └── stress_harness.py    ← headless multi-season orchestrator
+│   ├── transactions/      ← trades, free agency, contracts, draft, coaching
 │   │   ├── contracts.py         ← contract signing, restructuring, release, market value
 │   │   ├── satisfaction.py      ← weekly evaluation, warning signals, interventions, contagion
 │   │   ├── free_agency.py       ← FA market, interest tiers, pitch meetings, offers, AI signings
 │   │   ├── franchise_tag.py     ← exclusive/transition tags, salary calculation, consecutive tags
 │   │   ├── trades.py            ← trade value, evaluation, GM personality, AI offers, execution
-│   │   └── draft.py             ← draft loop, pick selection, AI picks, rookie contracts
+│   │   ├── draft.py             ← draft loop, pick selection, AI picks, rookie contracts
+│   │   └── coaching.py          ← coach assignment, tenure tracking, personality sync (Phase 4)
 │   ├── scouting/          ← draft class generation, scouting reports, draft board
 │   │   ├── prospects.py         ← draft class generation, prospect attributes, combine
 │   │   ├── scouts.py            ← scout assignment, accuracy tiers, flag detection, UI-safe views
@@ -220,6 +227,27 @@ Goal: Free agency, contracts, trades, scouting, and draft systems that create a 
 - [x] Exit criteria passing: full offseason cycle completes with FA signings, draft, and roster cuts
 
 **Phase 3 Complete!** ✅
+
+---
+
+**Phase 4 — Dynasty & Coach Identity** (In Progress)
+
+Goal: Coach identity as a first-class entity, portable careers, media/pressure system, 3-season stability.
+
+### Phase 4 Checklist
+- [x] Coach identity schema (`coach_career`, `coach_tenure` tables + `coach_id` on `legacy_score`, `hall_of_fame`)
+- [x] Migration helper (`ensure_coach_tables()` in `connection.py`)
+- [x] Coach constants added to `src/utils/constants.py` (age range, defaults, tenure reasons)
+- [x] Single mutation helper (`src/transactions/coaching.py` — `assign_coach_to_team`)
+- [x] AI coach generation (`generate_ai_coaches()` in `src/generation/teams.py`)
+- [x] Player coach creation in `generate.py` (CLI flags: `--coach-first-name`, `--coach-last-name`, `--coach-archetype`)
+- [x] Verification passing: `python verify_phase4_p1.py` exits 0
+- [x] Multi-season stress harness + invariant battery + League Health Report
+- [x] Baseline bug fixes (Inv 4, Inv 8, Inv 12 cascade) — `verify_phase4_p2_5.py` passing
+- [ ] Hiring/firing system with coaching carousel
+- [ ] Media pressure and hot seat system
+- [ ] 3-season stability testing
+- [ ] Legacy score integration with coach identity
 
 ---
 
