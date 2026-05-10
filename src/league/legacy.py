@@ -134,9 +134,22 @@ def update_legacy_score(
         if recent_champs >= DYNASTY_CHAMPIONSHIPS_REQUIRED:
             is_dynasty = 1
 
-    # HOF eligible
+    # Find the player coach for this team (if any)
+    player_coach_row = conn.execute("""
+        SELECT id FROM coach_career
+        WHERE is_player = 1 AND is_active = 1 AND current_team_id = ?
+    """, (user_team_id,)).fetchone()
+    coach_id = player_coach_row['id'] if player_coach_row else None
+
+    # HOF eligible — use career total from coach_legacy_score if available
+    career_total_for_hof = total_legacy
+    if coach_id:
+        coach_career_total = compute_career_legacy_total(conn, coach_id, season_year)
+        if coach_career_total > 0:
+            career_total_for_hof = coach_career_total
+
     hof_eligible = (
-        1 if total_legacy >= HOF_LEGACY_THRESHOLD
+        1 if career_total_for_hof >= HOF_LEGACY_THRESHOLD
         and seasons_coached >= HOF_MIN_SEASONS else 0
     )
 
@@ -152,6 +165,7 @@ def update_legacy_score(
         'total_legacy': total_legacy,
         'is_dynasty': is_dynasty,
         'hof_eligible': hof_eligible,
+        'coach_id': coach_id,
     })
 
     return {
@@ -268,21 +282,8 @@ def update_coach_legacy_score(
     """, (coach_id,)).fetchone()
 
     if not coach_row or coach_row['current_team_id'] is None:
-        # Coach between jobs - write zeros
-        team_id = 0  # Placeholder
-        factors = {
-            'championships': 0,
-            'conference_titles': 0,
-            'season_win_pct': 0.0,
-            'stars_developed': 0,
-            'cap_efficiency_score': 50,
-            'media_legacy_score': 50,
-        }
-        multipliers = {
-            'era_difficulty_multiplier': 1.0,
-            'starting_condition_multiplier': 1.0,
-        }
-        season_score = 0
+        # Coach between jobs — skip writing a row (score is 0, no team to reference)
+        return 0
     else:
         team_id = coach_row['current_team_id']
 

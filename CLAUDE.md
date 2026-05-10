@@ -26,9 +26,6 @@ Save format: One `.db` file per franchise (SQLite database)
 ├── simulate_game.py       ← CLI: simulate a single game or batch
 ├── run_season.py          ← CLI: season management (Phase 2)
 ├── run_offseason.py       ← CLI: offseason management (Phase 3)
-├── verify_phase4_p1.py    ← verification: Phase 4 prompt #1 (coach identity)
-├── verify_phase4_p3.py    ← verification: Phase 4 prompt #3 (AI GM behavior)
-├── verify_phase4_p8.py    ← verification: Phase 4 prompt #8 (historical records)
 ├── run_stress_test.py     ← CLI: multi-season stress test (Phase 4)
 ├── view_records.py        ← CLI: league records and history viewer (Phase 4)
 ├── docs/                  ← Game Design Documents (read before implementing any system)
@@ -37,7 +34,8 @@ Save format: One `.db` file per franchise (SQLite database)
 │   ├── GDD_Layer2B_TransactionOffseason.md
 │   ├── GDD_Layer3_DataModel.md
 │   ├── GDD_Layer4_FeatureRoadmap.md
-│   └── Phase4_StressTest_BaselineFindings.md
+│   ├── Phase4_StressTest_BaselineFindings.md
+│   └── Phase4_ShipGate_Report.md
 ├── src/                   ← all Python source code
 │   ├── db/                ← schema, migrations, connection helpers
 │   │   ├── schema.sql           ← full SQLite schema
@@ -74,7 +72,11 @@ Save format: One `.db` file per franchise (SQLite database)
 │   │   ├── health_report.py     ← League Health Report generator
 │   │   ├── stress_harness.py    ← headless multi-season orchestrator
 │   │   ├── team_phase.py        ← team phase classifier (rebuild/bridge/contend/win_now/decline)
-│   │   └── historical_records.py ← league records, leaderboards, champion history (Phase 4)
+│   │   ├── historical_records.py ← league records, leaderboards, champion history (Phase 4)
+│   │   ├── owner_sentiment.py   ← owner sentiment tracking, hot seat tiers (Phase 4)
+│   │   ├── era_context.py       ← era difficulty multiplier computation (Phase 4 Prompt #7)
+│   │   ├── peer_ranking.py      ← coach career peer rankings (Phase 4 Prompt #7)
+│   │   └── narrative_beats.py   ← end-of-season narrative generation (Phase 4 Prompt #9)
 │   ├── transactions/      ← trades, free agency, contracts, draft, coaching
 │   │   ├── contracts.py         ← contract signing, restructuring, release, market value
 │   │   ├── satisfaction.py      ← weekly evaluation, warning signals, interventions, contagion
@@ -84,7 +86,10 @@ Save format: One `.db` file per franchise (SQLite database)
 │   │   ├── draft.py             ← draft loop, pick selection, AI picks, rookie contracts
 │   │   ├── coaching.py          ← coach assignment, tenure tracking, personality sync (Phase 4)
 │   │   ├── coaching_carousel.py ← AI coach fire/hire based on performance (Phase 4)
-│   │   └── press_conference.py  ← Tier 1 weekly press conferences, autopilot (Phase 4 Prompt #5)
+│   │   ├── coach_offers.py      ← job offers for vacant coaches (Phase 4)
+│   │   ├── press_conference.py  ← Tier 1 weekly press conferences, autopilot (Phase 4 Prompt #5)
+│   │   ├── tier2_press_conference.py ← Tier 2 dramatic press events (Phase 4 Prompt #6)
+│   │   └── tier2_triggers.py        ← Tier 2 trigger detection (Phase 4 Prompt #6)
 │   ├── scouting/          ← draft class generation, scouting reports, draft board
 │   │   ├── prospects.py         ← draft class generation, prospect attributes, combine
 │   │   ├── scouts.py            ← scout assignment, accuracy tiers, flag detection, UI-safe views
@@ -93,11 +98,28 @@ Save format: One `.db` file per franchise (SQLite database)
 │   ├── ui/                ← terminal interface
 │   │   ├── standings_display.py ← division/conference standings
 │   │   ├── stats_display.py     ← stat leaderboards
-│   │   └── roster_display.py    ← roster with contracts
+│   │   ├── roster_display.py    ← roster with contracts
+│   │   ├── season_summary.py    ← end-of-season summary display (Phase 4 Prompt #9)
+│   │   ├── career_view.py       ← coach career view (Phase 4 Prompt #9)
+│   │   ├── dramatic_moments.py  ← dynasty/HOF moment rendering (Phase 4 Prompt #9)
+│   │   └── colors.py            ← ANSI color helpers
 │   └── utils/             ← shared helpers, constants, probability functions
 │       ├── constants.py         ← all tuning constants, thresholds, position lists
 │       ├── ai_behavior_matrix.py ← 5x5 personality×phase behavior grid (Phase 4)
-│       └── press_templates.py   ← 30 press conference templates across 8 contexts (Phase 4 Prompt #5)
+│       ├── press_templates.py   ← 30 press conference templates across 8 contexts (Phase 4 Prompt #5)
+│       └── tier2_templates.py   ← 24 dramatic press templates (Phase 4 Prompt #6)
+├── tests/
+│   └── verify/            ← Phase 4 verification scripts
+│       ├── verify_phase4_p1.py      ← coach identity schema
+│       ├── verify_phase4_p2_5.py    ← stress harness baseline
+│       ├── verify_phase4_p3.py      ← AI GM behavior
+│       ├── verify_phase4_p4.py      ← owner sentiment
+│       ├── verify_phase4_p5.py      ← Tier 1 press conferences
+│       ├── verify_phase4_p6.py      ← Tier 2 press conferences
+│       ├── verify_phase4_p7.py      ← coach legacy expansion
+│       ├── verify_phase4_p8.py      ← historical records
+│       ├── verify_phase4_p9.py      ← end-of-season UI
+│       └── verify_phase4_shipgate.py ← ship gate (8 exit criteria)
 ├── saves/                 ← franchise .db files (gitignored)
 └── assets/                ← future UI assets (logos, fonts)
 ```
@@ -118,6 +140,8 @@ Before implementing any system, read the relevant GDD section. The GDDs are the 
 | Player satisfaction, holdouts, retirements | `docs/GDD_Layer2B_TransactionOffseason.md` §7 |
 | Full SQLite schema (all tables) | `docs/GDD_Layer3_DataModel.md` |
 | Build order, phase exit criteria | `docs/GDD_Layer4_FeatureRoadmap.md` |
+| Coach identity, media, dynasty, exit criteria | `docs/Phase4_DesignDecisions.md` |
+| Phase 4 ship gate validation results | `docs/Phase4_ShipGate_Report.md` |
 
 ---
 
@@ -240,7 +264,7 @@ Goal: Free agency, contracts, trades, scouting, and draft systems that create a 
 
 ---
 
-**Phase 4 — Dynasty & Coach Identity** (In Progress)
+**Phase 4 — Dynasty & Coach Identity** ✅
 
 Goal: Coach identity as a first-class entity, portable careers, media/pressure system, 3-season stability.
 
@@ -270,8 +294,11 @@ Goal: Coach identity as a first-class entity, portable careers, media/pressure s
 - [x] CLI integration (`run_season.py` — interactive prompt after each regular season game)
 - [x] Stress harness integration (`src/league/stress_harness.py` — headless auto-resolve)
 - [x] Verification passing: `python verify_phase4_p5.py` exits 0
-- [ ] Tier 2 dramatic press conferences (Phase 4 Prompt #6)
-- [ ] Legacy score integration with coach identity
+- [x] Tier 2 event-triggered press conference + dramatic templates (Phase 4 Prompt #6)
+- [x] Legacy score integration with coach identity
+- [x] Ship gate validation: 8/8 exit criteria passing (`tests/verify/verify_phase4_shipgate.py`)
+
+**Phase 4 Complete!** ✅
 
 ---
 

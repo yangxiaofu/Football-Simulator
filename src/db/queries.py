@@ -989,6 +989,7 @@ def upsert_legacy_score(
     conn: sqlite3.Connection, season_year: int, data: dict,
 ) -> None:
     """Insert or update legacy_score record."""
+    coach_id = data.get('coach_id')
     existing = get_legacy_score(conn, season_year)
     if existing:
         conn.execute("""
@@ -997,7 +998,8 @@ def upsert_legacy_score(
                 career_win_pct = ?, stars_developed = ?,
                 cap_efficiency_score = ?, seasons_coached = ?,
                 media_legacy_score = ?, total_legacy_score = ?,
-                is_dynasty = ?, hof_eligible = ?
+                is_dynasty = ?, hof_eligible = ?,
+                coach_id = ?
             WHERE season_year = ?
         """, (
             data['championships'], data['conference_titles'],
@@ -1005,6 +1007,7 @@ def upsert_legacy_score(
             data['cap_efficiency'], data['seasons_coached'],
             data['media_score'], data['total_legacy'],
             data['is_dynasty'], data['hof_eligible'],
+            coach_id,
             season_year,
         ))
     else:
@@ -1013,14 +1016,16 @@ def upsert_legacy_score(
                 season_year, championships, conference_titles,
                 career_win_pct, stars_developed, cap_efficiency_score,
                 seasons_coached, media_legacy_score,
-                total_legacy_score, is_dynasty, hof_eligible
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                total_legacy_score, is_dynasty, hof_eligible,
+                coach_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             season_year, data['championships'], data['conference_titles'],
             data['career_win_pct'], data['stars_developed'],
             data['cap_efficiency'], data['seasons_coached'],
             data['media_score'], data['total_legacy'],
             data['is_dynasty'], data['hof_eligible'],
+            coach_id,
         ))
 
 
