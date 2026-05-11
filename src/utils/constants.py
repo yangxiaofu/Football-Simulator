@@ -1077,6 +1077,37 @@ TRADE_NEED_ADJUSTMENT_DIVISOR = 200  # Divisor for positional need adjustment
 TRADE_NEED_SCALE_MAX = 100  # Maximum need score scale
 TRADE_VETERAN_OVERALL_THRESHOLD = 80  # Overall threshold for veteran consideration
 
+# Phase 5 — Trade Depth
+DEADLINE_BEHAVIOR_WEEKS = 2  # last N weeks where deadline multipliers apply
+
+# Seller multipliers (rebuild/decline phase): asks effectively drop
+TRADE_DEADLINE_SELLER_MULTIPLIER_REBUILD = 1.15
+TRADE_DEADLINE_SELLER_MULTIPLIER_DECLINE = 1.10
+
+# Buyer multipliers (contend/win_now phase): willing to overpay slightly
+TRADE_DEADLINE_BUYER_MULTIPLIER_CONTEND = 1.05
+TRADE_DEADLINE_BUYER_MULTIPLIER_WIN_NOW = 1.10
+
+TRADE_DEADLINE_BRIDGE_MULTIPLIER = 1.00  # bridge/neutral — no shift
+
+# Typed rejection reasons (returned with every declined trade)
+TRADE_REJECTION_REASONS = {
+    'overvalued':           'overvalues the player relative to current market',
+    'not_phase_fit':        'not a fit for current rebuild phase',
+    'not_phase_fit_winnow': 'preferring to keep win-now veterans',
+    'position_depth':       'prefers to retain position depth',
+    'cap_unworkable':       'cap impact unworkable this season',
+    'age_curve':            'aging curve concerns',
+    'scheme_mismatch':      'scheme mismatch',
+    'roster_lock':          'core roster lock — not available',
+}
+
+# Trade shopping interest tiers
+TRADE_SHOP_HIGH_INTEREST_PCT     = 0.80   # team would pay ≥80% of value → HIGH
+TRADE_SHOP_MODERATE_INTEREST_PCT = 0.50   # 50-80% → MODERATE
+TRADE_SHOP_LOW_INTEREST_PCT      = 0.20   # 20-50% → LOW
+# Below 20% → NO interest
+
 # ======================
 # PLAYER SATISFACTION
 # ======================

@@ -66,6 +66,17 @@ from ..utils.constants import (
     TRADE_NEED_ADJUSTMENT_DIVISOR,
     TRADE_NEED_SCALE_MAX,
     TRADE_VETERAN_OVERALL_THRESHOLD,
+    DEADLINE_BEHAVIOR_WEEKS,
+    TRADE_DEADLINE_SELLER_MULTIPLIER_REBUILD,
+    TRADE_DEADLINE_SELLER_MULTIPLIER_DECLINE,
+    TRADE_DEADLINE_BUYER_MULTIPLIER_CONTEND,
+    TRADE_DEADLINE_BUYER_MULTIPLIER_WIN_NOW,
+    TRADE_DEADLINE_BRIDGE_MULTIPLIER,
+    TRADE_REJECTION_REASONS,
+    TRADE_SHOP_HIGH_INTEREST_PCT,
+    TRADE_SHOP_MODERATE_INTEREST_PCT,
+    TRADE_SHOP_LOW_INTEREST_PCT,
+    to_letter_grade,
 )
 
 
@@ -179,6 +190,7 @@ def evaluate_trade(
     """
     league = get_league_state(conn)
     season_year = league['current_season'] if league else 0
+    current_week = league['current_week'] if league else 0
 
     # Calculate offered value (what receiving team would gain)
     offered_value = _sum_asset_values(offered_assets, season_year, conn)
@@ -198,6 +210,23 @@ def evaluate_trade(
     # Apply need modifier to threshold
     adjusted_threshold = requested_value * (1 - avg_need / TRADE_NEED_ADJUSTMENT_DIVISOR)
 
+    # Phase 5 — Deadline behavior shift: apply phase-aware multiplier in last N weeks
+    deadline_multiplier = TRADE_DEADLINE_BRIDGE_MULTIPLIER
+    if (league and TRADE_DEADLINE_WEEK - DEADLINE_BEHAVIOR_WEEKS
+            < current_week <= TRADE_DEADLINE_WEEK):
+        from ..league.team_phase import compute_team_phase
+        recv_phase = compute_team_phase(conn, receiving_team_id, season_year)
+        if recv_phase == 'rebuild':
+            deadline_multiplier = TRADE_DEADLINE_SELLER_MULTIPLIER_REBUILD
+        elif recv_phase == 'decline':
+            deadline_multiplier = TRADE_DEADLINE_SELLER_MULTIPLIER_DECLINE
+        elif recv_phase == 'win_now':
+            deadline_multiplier = TRADE_DEADLINE_BUYER_MULTIPLIER_WIN_NOW
+        elif recv_phase == 'contend':
+            deadline_multiplier = TRADE_DEADLINE_BUYER_MULTIPLIER_CONTEND
+    if deadline_multiplier != TRADE_DEADLINE_BRIDGE_MULTIPLIER:
+        adjusted_threshold /= deadline_multiplier
+
     value_gap = offered_value - adjusted_threshold
     fair = offered_value >= adjusted_threshold
 
@@ -209,6 +238,24 @@ def evaluate_trade(
     else:
         verdict = "decline"
 
+    # Phase 5 — Typed rejection reason
+    reason_code = None
+    if verdict == 'decline':
+        if avg_need < 50:
+            reason_code = 'position_depth'
+        else:
+            reason_code = 'overvalued'
+
+    # Phase 5 — Attach counter-offer dict when verdict == 'counter'
+    counter_offer = None
+    if verdict == 'counter':
+        counter_offer = _build_counter_offer(
+            offering_team_id, receiving_team_id,
+            offered_assets, requested_assets,
+            {'offered_value': offered_value, 'adjusted_threshold': adjusted_threshold},
+            season_year, conn,
+        )
+
     return {
         'offered_value': offered_value,
         'requested_value': requested_value,
@@ -217,6 +264,8 @@ def evaluate_trade(
         'adjusted_threshold': adjusted_threshold,
         'fair': fair,
         'verdict': verdict,
+        'reason_code': reason_code,
+        'counter_offer': counter_offer,
     }
 
 
@@ -539,8 +588,278 @@ def check_trade_deadline(
 
 
 # ======================================================================
+# PHASE 5 — TRADE DEPTH PUBLIC API
+# ======================================================================
+
+def get_player_value(conn: sqlite3.Connection, player_id: int) -> dict:
+    """Single-asset valuation. No DB writes. Returns UI-safe dict (no raw true_overall)."""
+    from ..db.queries import get_all_teams
+
+    val = calculate_player_trade_value(player_id, conn)
+    info = get_player_trade_info(conn, player_id)
+    if not info:
+        return {}
+
+    final_value = val['final_value']
+    player_name = f"{info['first_name']} {info['last_name']}"
+    overall_letter = to_letter_grade(info['true_overall'])
+    value_low = int(final_value * 0.85)
+    value_high = int(final_value * 1.15)
+
+    comparables = _build_comparable_assets(final_value)
+
+    return {
+        'player_id': player_id,
+        'player_name': player_name,
+        'true_position': info['position'],
+        'overall_letter': overall_letter,
+        'age': info['age'],
+        'value_low': value_low,
+        'value_high': value_high,
+        'comparable_assets': comparables,
+    }
+
+
+def estimate_trade(
+    conn: sqlite3.Connection,
+    giving_player_ids: list,
+    giving_pick_codes: list,
+    receiving_player_ids: list,
+    receiving_pick_codes: list,
+    giving_team_id: int,
+    receiving_team_id: int,
+) -> dict:
+    """Dry-run trade evaluation. No DB writes."""
+    league = get_league_state(conn)
+    season_year = league['current_season'] if league else 0
+
+    offered_assets = {
+        'players': giving_player_ids,
+        'picks': [_parse_pick_code(c, giving_team_id, season_year, conn)
+                  for c in giving_pick_codes if c],
+    }
+    requested_assets = {
+        'players': receiving_player_ids,
+        'picks': [_parse_pick_code(c, receiving_team_id, season_year, conn)
+                  for c in receiving_pick_codes if c],
+    }
+    # Remove picks that failed to parse (value = 0 means unknown pick)
+    offered_assets['picks'] = [p for p in offered_assets['picks'] if p]
+    requested_assets['picks'] = [p for p in requested_assets['picks'] if p]
+
+    evaluation = evaluate_trade(
+        giving_team_id, receiving_team_id,
+        offered_assets, requested_assets, conn,
+    )
+
+    verdict = evaluation['verdict']
+    value_gap_pct = (
+        (evaluation['offered_value'] - evaluation['requested_value'])
+        / max(evaluation['requested_value'], 1)
+    )
+    if verdict == 'accept':
+        acceptance_probability = round(random.uniform(0.80, 0.95), 2)
+        predicted_response = 'likely_accept'
+    elif verdict == 'counter':
+        acceptance_probability = round(random.uniform(0.35, 0.55), 2)
+        predicted_response = 'likely_counter'
+    else:
+        acceptance_probability = round(random.uniform(0.05, 0.15), 2)
+        predicted_response = 'likely_reject'
+
+    return {
+        'giving_value': evaluation['offered_value'],
+        'receiving_value': evaluation['requested_value'],
+        'value_gap_pct': round(value_gap_pct, 4),
+        'receiver_assessment': predicted_response,
+        'acceptance_probability': acceptance_probability,
+        'predicted_response': predicted_response,
+        'reason_code': evaluation.get('reason_code'),
+        'counter_offer': evaluation.get('counter_offer'),
+    }
+
+
+def shop_player(conn: sqlite3.Connection, player_id: int) -> dict:
+    """Poll all 31 AI teams for interest in the player. No DB writes."""
+    from ..db.queries import get_all_teams
+    from ..league.team_phase import compute_team_phase
+
+    val = calculate_player_trade_value(player_id, conn)
+    info = get_player_trade_info(conn, player_id)
+    if not info:
+        return {}
+
+    final_value = val['final_value']
+    player_name = f"{info['first_name']} {info['last_name']}"
+    player_team_id = info['team_id']
+    position = info['position']
+    overall_letter = to_letter_grade(info['true_overall'])
+
+    league = get_league_state(conn)
+    user_team_id = league['user_team_id'] if league else None
+    season_year = league['current_season'] if league else 0
+    current_week = league['current_week'] if league else 0
+
+    all_teams = get_all_teams(conn)
+
+    tiers = {'HIGH': [], 'MODERATE': [], 'LOW': [], 'NO': []}
+    top_offer_estimates = {}
+
+    for team in all_teams:
+        team_id = team['id']
+        if team_id == user_team_id:
+            continue  # don't include user's own team
+
+        abbr = team['abbreviation']
+
+        if team_id == player_team_id:
+            tiers['NO'].append(abbr)  # can't trade with yourself
+            continue
+
+        # Compute interest based on positional need
+        need = _calculate_positional_need(team_id, position, conn)
+        interest_value = final_value * (need / TRADE_NEED_SCALE_MAX) if TRADE_NEED_SCALE_MAX > 0 else 0
+
+        # Apply deadline multiplier if applicable
+        if (TRADE_DEADLINE_WEEK - DEADLINE_BEHAVIOR_WEEKS
+                < current_week <= TRADE_DEADLINE_WEEK):
+            phase = compute_team_phase(conn, team_id, season_year)
+            if phase == 'rebuild':
+                interest_value *= TRADE_DEADLINE_SELLER_MULTIPLIER_REBUILD
+            elif phase == 'decline':
+                interest_value *= TRADE_DEADLINE_SELLER_MULTIPLIER_DECLINE
+            elif phase == 'win_now':
+                interest_value *= TRADE_DEADLINE_BUYER_MULTIPLIER_WIN_NOW
+            elif phase == 'contend':
+                interest_value *= TRADE_DEADLINE_BUYER_MULTIPLIER_CONTEND
+
+        # Normalize interest as fraction of full value
+        interest_pct = interest_value / final_value if final_value > 0 else 0
+
+        if interest_pct >= TRADE_SHOP_HIGH_INTEREST_PCT:
+            tiers['HIGH'].append(abbr)
+            top_offer_estimates[abbr] = int(interest_value)
+        elif interest_pct >= TRADE_SHOP_MODERATE_INTEREST_PCT:
+            tiers['MODERATE'].append(abbr)
+            top_offer_estimates[abbr] = int(interest_value)
+        elif interest_pct >= TRADE_SHOP_LOW_INTEREST_PCT:
+            tiers['LOW'].append(abbr)
+        else:
+            tiers['NO'].append(abbr)
+
+    return {
+        'player_id': player_id,
+        'player_name': player_name,
+        'true_position': info['position'],
+        'overall_letter': overall_letter,
+        'tiers': tiers,
+        'top_offer_estimates': top_offer_estimates,
+    }
+
+
+def propose_counter(
+    conn: sqlite3.Connection,
+    receiver_team_id: int,
+    giving_player_ids: list,
+    giving_pick_codes: list,
+    receiving_player_ids: list,
+    receiving_pick_codes: list,
+) -> dict:
+    """Public wrapper around _build_counter_offer. No DB writes."""
+    league = get_league_state(conn)
+    season_year = league['current_season'] if league else 0
+
+    offered_assets = {
+        'players': giving_player_ids,
+        'picks': [_parse_pick_code(c, receiver_team_id, season_year, conn)
+                  for c in giving_pick_codes if c],
+    }
+    requested_assets = {
+        'players': receiving_player_ids,
+        'picks': [_parse_pick_code(c, receiver_team_id, season_year, conn)
+                  for c in receiving_pick_codes if c],
+    }
+    offered_assets['picks'] = [p for p in offered_assets['picks'] if p]
+    requested_assets['picks'] = [p for p in requested_assets['picks'] if p]
+
+    evaluation = evaluate_trade(
+        receiver_team_id, receiver_team_id,
+        offered_assets, requested_assets, conn,
+    )
+    result = _build_counter_offer(
+        receiver_team_id, receiver_team_id,
+        offered_assets, requested_assets,
+        evaluation, season_year, conn,
+    )
+    return result or {'message': 'No counter available', 'rationale': 'gap too large'}
+
+
+# ======================================================================
 # PRIVATE HELPERS
 # ======================================================================
+
+def _parse_pick_code(code: str, owner_team_id: int, season_year: int,
+                      conn: sqlite3.Connection) -> Optional[dict]:
+    """Parse '2025_R2' → pick dict for use in asset dicts. Returns None if unparseable."""
+    try:
+        year_str, round_part = code.split('_R')
+        target_year = int(year_str)
+        round_num = int(round_part)
+    except (ValueError, AttributeError):
+        return None
+
+    pick_row = get_draft_pick_by_criteria(conn, owner_team_id, target_year, round_num)
+    pick_number = pick_row['pick_number'] if pick_row else None
+    return {
+        'round': round_num,
+        'year': target_year,
+        'team_id': owner_team_id,
+        'pick_number': pick_number,
+    }
+
+
+def _build_comparable_assets(final_value: int) -> list:
+    """Return 3-5 human-readable strings comparing final_value to pick value ranges."""
+    comparables = []
+    low = final_value * 0.80
+    high = final_value * 1.20
+
+    pick_descriptions = {
+        (1, 'early'): '1st-round pick (top-10)',
+        (1, 'mid'):   '1st-round pick (mid)',
+        (1, 'late'):  '1st-round pick (late)',
+        (2, 'early'): '2nd-round pick (early)',
+        (2, 'mid'):   '2nd-round pick',
+        (2, 'late'):  '2nd-round pick (late)',
+        (3, 'early'): '3rd-round pick (early)',
+        (3, 'mid'):   '3rd-round pick',
+        (3, 'late'):  '3rd-round pick (late)',
+        (4, 'early'): '4th-round pick',
+        (4, 'mid'):   '4th-round pick',
+        (4, 'late'):  '4th-round pick',
+        (5, 'early'): '5th-round pick',
+        (5, 'mid'):   '5th-round pick',
+        (5, 'late'):  '5th-round pick',
+    }
+    for (rnd, tier), desc in pick_descriptions.items():
+        v = TRADE_PICK_VALUES.get((rnd, tier), 0)
+        if low <= v <= high and len(comparables) < 3:
+            comparables.append(desc)
+
+    # Add a value-range description
+    if final_value >= 1500:
+        comparables.append('Franchise cornerstone / top-5 pick equivalent')
+    elif final_value >= 800:
+        comparables.append('Mid-first or strong second-round package')
+    elif final_value >= 400:
+        comparables.append('Late first or early second-round value')
+    elif final_value >= 150:
+        comparables.append('Third-to-fourth round pick range')
+    else:
+        comparables.append('Depth piece or late-round pick')
+
+    return comparables[:5] if comparables else ['Minimal trade value']
+
 
 def _get_pick_tier(pick_number: Optional[int]) -> str:
     """Map a pick number (1-32) to a tier string."""

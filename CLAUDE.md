@@ -104,6 +104,7 @@ Save format: One `.db` file per franchise (SQLite database)
 │   │   ├── season_summary.py    ← end-of-season summary display (Phase 4 Prompt #9)
 │   │   ├── career_view.py       ← coach career view (Phase 4 Prompt #9)
 │   │   ├── dramatic_moments.py  ← dynasty/HOF moment rendering (Phase 4 Prompt #9)
+│   │   ├── trade_view.py        ← trade evaluation display (Phase 5 Prompt #6)
 │   │   └── colors.py            ← ANSI color helpers
 │   └── utils/             ← shared helpers, constants, probability functions
 │       ├── constants.py         ← all tuning constants, thresholds, position lists
@@ -126,7 +127,9 @@ Save format: One `.db` file per franchise (SQLite database)
 │       ├── verify_phase5_p1.py      ← stats schema & weekly aggregation
 │       ├── verify_phase5_p2.py      ← view stats CLI
 │       ├── verify_phase5_p3.py      ← depth chart system
-│       └── verify_phase5_p4.py      ← Stars of the Week
+│       ├── verify_phase5_p4.py      ← Stars of the Week
+│       ├── verify_phase5_p5.py      ← Tier 2 streak trigger + lineup controversy
+│       └── verify_phase5_p6.py      ← trade depth
 ├── saves/                 ← franchise .db files (gitignored)
 └── assets/                ← future UI assets (logos, fonts)
 ```
@@ -346,6 +349,12 @@ Goal: Weekly stat aggregation, leaderboards, Stars of the Week, and enhanced med
   - 3 Tier 2 templates (`src/utils/tier2_templates.py`), 5 Tier 1 templates (`src/utils/press_templates.py`)
   - Owner sentiment delta (-3) on controversy via `update_sentiment_drivers`
   - Verification: `python tests/verify/verify_phase5_p5.py` (15/15)
+- [x] **Prompt #6**: Trade Depth
+  - `get_player_value`, `estimate_trade`, `shop_player`, `propose_counter` in `trades.py`
+  - Typed rejection reasons + deadline behavior shift + counter-offer attached in `evaluate_trade()`
+  - `--player-value`, `--estimate-trade`, `--shop-player` on `run_season.py`
+  - `src/ui/trade_view.py` display module
+  - Verification: `python tests/verify/verify_phase5_p6.py` (15/15)
 
 **Phase 5 In Progress...**
 

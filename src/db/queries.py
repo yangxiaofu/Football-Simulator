@@ -4491,3 +4491,14 @@ def check_lineup_controversy_queued(
         LIMIT 1
     """, (team_id, season_year, week_number)).fetchone()
     return row is not None
+
+
+# Phase 5 Prompt #6 — Trade Depth
+
+def get_team_id_for_player(
+    conn: sqlite3.Connection,
+    player_id: int,
+) -> Optional[int]:
+    """Return the team_id for a player, or None if not found."""
+    info = get_player_trade_info(conn, player_id)
+    return info['team_id'] if info else None

@@ -126,10 +126,12 @@ def check_scope_discipline():
         print("  ✗ view_stats.py missing --stars flag (Phase 5 P2)")
         return False
 
-    forbidden_flags = ["--shop-player", "--estimate-trade", "--player-value", "--fa-pitch"]
+    # P6 flags (--player-value, --estimate-trade, --shop-player) are now shipped — skip them.
+    # Only check for P7+ flags not yet implemented.
+    forbidden_flags = ["--fa-pitch"]
     found = [f for f in forbidden_flags if f in run_src]
     if found:
-        print(f"  ✗ run_season.py has P6+ flags: {found}")
+        print(f"  ✗ run_season.py has P7+ flags: {found}")
         return False
 
     forbidden_files = ["fa_pitch_templates.py", "sentiment_explainer.py", "trade_shop.py"]

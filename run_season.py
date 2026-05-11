@@ -29,7 +29,10 @@ from src.db.queries import (
     get_team,
     get_all_teams,
     insert_new_season,
+    get_team_id_for_player,
 )
+from src.transactions.trades import get_player_value, estimate_trade, shop_player
+from src.ui.trade_view import render_player_value, render_trade_estimate, render_shop_results
 from src.league.season import advance_week, is_regular_season_complete, get_current_status
 from src.league.standings import update_all_standings
 from src.league.playoffs import run_full_playoffs, generate_playoff_bracket
@@ -615,6 +618,16 @@ def main():
                        help='Swap depth positions on your team: --swap-depth WR1 1 2')
     group.add_argument('--reset-depth', nargs='?', const='ALL', metavar='POSITION',
                        help='Reset your team\'s depth chart, optionally one POSITION')
+    group.add_argument('--player-value', metavar='PLAYER_ID', type=int,
+                       help='Get trade valuation for a player: --player-value 123')
+    group.add_argument('--estimate-trade', nargs=4,
+                       metavar=('GIVING_PLAYERS', 'GIVING_PICKS',
+                                'RECEIVING_PLAYERS', 'RECEIVING_PICKS'),
+                       help=('Dry-run trade evaluation. Use player IDs or "none". '
+                             'Picks as "2025_R2,2026_R4" or "none". '
+                             'Example: --estimate-trade 42 none 156 none'))
+    group.add_argument('--shop-player', metavar='PLAYER_ID', type=int,
+                       help='Poll all AI teams for interest in a player: --shop-player 123')
 
     parser.add_argument('--force-playoffs', action='store_true',
                         help='Force re-simulation of playoffs (overrides idempotency check)')
@@ -666,6 +679,56 @@ def main():
             user_team_id = league['user_team_id']
             position_filter = None if args.reset_depth == 'ALL' else args.reset_depth
             cmd_reset_depth(conn, user_team_id, position_filter)
+        elif args.player_value:
+            value = get_player_value(conn, args.player_value)
+            if not value:
+                print(f"Error: player {args.player_value} not found")
+                sys.exit(1)
+            render_player_value(value)
+        elif args.estimate_trade:
+            giving_p, giving_pk, recv_p, recv_pk = args.estimate_trade
+            giving_players = [int(x) for x in giving_p.split(',')
+                              if x.strip().lower() != 'none' and x.strip()]
+            giving_picks = [x for x in giving_pk.split(',')
+                            if x.strip().lower() != 'none' and x.strip()]
+            recv_players = [int(x) for x in recv_p.split(',')
+                            if x.strip().lower() != 'none' and x.strip()]
+            recv_picks = [x for x in recv_pk.split(',')
+                          if x.strip().lower() != 'none' and x.strip()]
+
+            if not recv_players and not recv_picks:
+                print("Error: must specify at least one receiving asset")
+                sys.exit(1)
+            if not recv_players:
+                print("Error: must include at least one receiving player to infer their team")
+                sys.exit(1)
+
+            recv_team_id = get_team_id_for_player(conn, recv_players[0])
+            if not recv_team_id:
+                print(f"Error: player {recv_players[0]} not found")
+                sys.exit(1)
+            for pid in recv_players[1:]:
+                if get_team_id_for_player(conn, pid) != recv_team_id:
+                    print("Error: receiving players must all be from the same team")
+                    sys.exit(1)
+
+            league = get_league_state(conn)
+            user_team_id = league['user_team_id']
+            user_team = get_team(conn, user_team_id)
+            recv_team = get_team(conn, recv_team_id)
+
+            result = estimate_trade(conn, giving_players, giving_picks,
+                                    recv_players, recv_picks,
+                                    user_team_id, recv_team_id)
+            render_trade_estimate(result,
+                                  user_team['abbreviation'],
+                                  recv_team['abbreviation'])
+        elif args.shop_player:
+            result = shop_player(conn, args.shop_player)
+            if not result:
+                print(f"Error: player {args.shop_player} not found")
+                sys.exit(1)
+            render_shop_results(result)
     except Exception as e:
         print(f"Error: {e}")
         import traceback
