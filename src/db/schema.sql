@@ -327,6 +327,8 @@ CREATE TABLE IF NOT EXISTS satisfaction_event (
     reason          TEXT NOT NULL,           -- e.g. 'winning', 'underpaid', 'franchise_tag'
     new_score       INTEGER NOT NULL,        -- score AFTER the change (0-100)
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    -- Phase 5 P8 additions (applied via ensure_satisfaction_tables migration):
+    --   ALTER TABLE satisfaction_event ADD COLUMN reason_code TEXT;
     FOREIGN KEY (player_id) REFERENCES player(id)
 );
 
@@ -1008,6 +1010,9 @@ CREATE TABLE IF NOT EXISTS owner_sentiment (
     championship_bonus      INTEGER NOT NULL DEFAULT 0,
     presser_delta           INTEGER NOT NULL DEFAULT 0,
 
+    -- Phase 5 P8 additions (applied via ensure_owner_sentiment_tables migration):
+    --   ALTER TABLE owner_sentiment ADD COLUMN reason_code TEXT;
+    --   ALTER TABLE owner_sentiment ADD COLUMN reason_detail TEXT;
     FOREIGN KEY (team_id) REFERENCES team(id),
     UNIQUE(team_id, season_year)
 );

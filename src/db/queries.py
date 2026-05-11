@@ -3053,6 +3053,58 @@ def update_sentiment_score_and_tier(
     """, (score, tier, team_id, season_year))
 
 
+# Phase 5 P8 — Sentiment Transparency
+
+def get_owner_sentiment_history(
+    conn: sqlite3.Connection, season_year: int, team_id: Optional[int] = None,
+) -> list[sqlite3.Row]:
+    """Return owner_sentiment rows for a season (one team or all teams)."""
+    if team_id is not None:
+        return conn.execute(
+            "SELECT * FROM owner_sentiment WHERE season_year = ? AND team_id = ?",
+            (season_year, team_id),
+        ).fetchall()
+    return conn.execute(
+        "SELECT * FROM owner_sentiment WHERE season_year = ?", (season_year,)
+    ).fetchall()
+
+
+def get_owner_sentiment_current_tier(
+    conn: sqlite3.Connection, team_id: int, season_year: int,
+) -> Optional[str]:
+    """Return current hot_seat_tier string for a team-season, or None."""
+    row = conn.execute(
+        "SELECT hot_seat_tier FROM owner_sentiment WHERE team_id = ? AND season_year = ?",
+        (team_id, season_year),
+    ).fetchone()
+    return row['hot_seat_tier'] if row else None
+
+
+def get_satisfaction_events_for_player(
+    conn: sqlite3.Connection, player_id: int, season_year: int,
+) -> list[sqlite3.Row]:
+    """Return all satisfaction_event rows for a player in a season, ordered by week."""
+    return conn.execute(
+        "SELECT * FROM satisfaction_event "
+        "WHERE player_id = ? AND season_year = ? "
+        "ORDER BY week ASC, id ASC",
+        (player_id, season_year),
+    ).fetchall()
+
+
+def get_players_below_satisfaction_threshold(
+    conn: sqlite3.Connection, season_year: int, threshold: int,
+) -> list[sqlite3.Row]:
+    """Return players with satisfaction below threshold, ordered by satisfaction ascending."""
+    return conn.execute("""
+        SELECT p.id, p.first_name || ' ' || p.last_name AS name,
+               p.position, p.satisfaction
+        FROM player p
+        WHERE p.satisfaction < ?
+        ORDER BY p.satisfaction ASC
+    """, (threshold,)).fetchall()
+
+
 def get_star_holdouts_count(conn: sqlite3.Connection, team_id: int) -> int:
     """Count active holdout events for stars (true_overall >= 90)."""
     return conn.execute("""

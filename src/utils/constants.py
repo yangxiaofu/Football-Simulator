@@ -1137,6 +1137,50 @@ PITCH_SIGNAL_TYPES = (
     PITCH_SIGNAL_WINNING_PRIMARY,
 )
 
+# Phase 5 P8 — Owner sentiment reason catalog
+# Keys are stored in owner_sentiment.reason_code; values are user-facing English strings.
+OWNER_SENTIMENT_REASONS = {
+    'loss_division_rival':    'Loss to division rival',
+    'loss_blowout':           'Blowout loss',
+    'loss_upset':             'Upset loss',
+    'win_signature':          'Signature win',
+    'win_division_rival':     'Win over division rival',
+    'win_streak_extended':    'Win streak extended',
+    'lineup_controversy':     'Lineup controversy (extreme demotion)',
+    'press_response_strong':  'Strong press conference response',
+    'press_response_fumble':  'Press conference fumble',
+    'rookie_breakout':        'Rookie breakout performance',
+    'season_outlook_improve': 'Season outlook improved',
+    'season_outlook_decline': 'Season outlook declined',
+    'cap_pressure_high':      'Cap space concern',
+    'trade_received_value':   'Trade execution (favorable)',
+    'trade_lost_value':       'Trade execution (unfavorable)',
+    'fa_signing_target':      'Free agent signing (target acquired)',
+    'fa_loss_target':         'Free agent loss (target signed elsewhere)',
+    'legacy_unknown':         '(legacy — reason not tracked)',
+}
+
+# Phase 5 P8 — Player satisfaction reason catalog
+# Keys are stored in satisfaction_event.reason_code; values are user-facing English strings.
+PLAYER_SATISFACTION_REASONS = {
+    'broken_promise':                 'Broken commitment',
+    'contract_dispute':               'Contract dispute',
+    'role_concern':                   'Role / playing time concern',
+    'snap_count_concern':             'Snap count below expectation',
+    'post_loss_frustration':          'Post-loss frustration',
+    'fatigue_irritation':             'Fatigue / overuse',
+    'teammate_signing_positive':      'Teammate signing (positive)',
+    'teammate_signing_negative':      'Teammate signing (concerned)',
+    'positional_replacement_concern': 'Positional replacement concern',
+    'extension_offered':              'Contract extension offered',
+    'extension_denied':               'Contract extension denied',
+    'legacy_unknown':                 '(legacy — reason not tracked)',
+}
+
+# Phase 5 P8 — Display limits
+SENTIMENT_TOP_CONTRIBUTORS_COUNT = 5   # top N deltas shown per sentiment query
+SENTIMENT_WEEKLY_SUMMARY_TOP_COUNT = 3 # top N shown in weekly summary embed
+
 # ======================
 # PLAYER SATISFACTION
 # ======================

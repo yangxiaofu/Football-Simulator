@@ -97,6 +97,23 @@ def advance_week(
                 if blurb:
                     print(f"    {blurb}")
 
+        # Phase 5 P8 — owner sentiment weekly summary
+        user_team_id = league['user_team_id'] if league['user_team_id'] else None
+        if user_team_id:
+            from ..league.sentiment_explainer import get_weekly_owner_sentiment_summary
+            from ..utils.constants import SENTIMENT_WEEKLY_SUMMARY_TOP_COUNT
+            sentiment_summary = get_weekly_owner_sentiment_summary(
+                conn, user_team_id, season_year, week_num
+            )
+            if sentiment_summary is not None:
+                tier = sentiment_summary['current_tier'].capitalize()
+                net = sentiment_summary['net_change']
+                sign = '+' if net >= 0 else ''
+                print(f"\n  Owner sentiment: {tier} ({sign}{net} season-to-date)")
+                for c in sentiment_summary['contributors'][:SENTIMENT_WEEKLY_SUMMARY_TOP_COUNT]:
+                    s = '+' if c['delta'] >= 0 else ''
+                    print(f"    {s}{c['delta']:3d}  {c['reason_label']}")
+
         # Update sentiment drivers every 4 weeks
         if week_num % 4 == 0:
             from ..league.owner_sentiment import update_weekly_drivers

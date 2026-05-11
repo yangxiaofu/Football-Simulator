@@ -305,6 +305,18 @@ def ensure_satisfaction_tables(conn: sqlite3.Connection) -> None:
     """)
     conn.commit()
 
+    # Phase 5 P8 — add reason_code column to satisfaction_event
+    try:
+        conn.execute("ALTER TABLE satisfaction_event ADD COLUMN reason_code TEXT")
+    except sqlite3.OperationalError:
+        pass  # column already exists
+
+    # Backfill existing rows so the explainer never sees NULL reason_code
+    conn.execute(
+        "UPDATE satisfaction_event SET reason_code = 'legacy_unknown' WHERE reason_code IS NULL"
+    )
+    conn.commit()
+
 
 def ensure_fa_tables(conn: sqlite3.Connection) -> None:
     """
@@ -717,6 +729,22 @@ def ensure_owner_sentiment_tables(conn: sqlite3.Connection) -> None:
     except sqlite3.OperationalError:
         pass  # Column already exists
 
+    # Phase 5 P8 — add sentiment reason columns idempotently
+    for col_def in [
+        "ALTER TABLE owner_sentiment ADD COLUMN reason_code TEXT",
+        "ALTER TABLE owner_sentiment ADD COLUMN reason_detail TEXT",
+    ]:
+        try:
+            conn.execute(col_def)
+        except sqlite3.OperationalError:
+            pass  # column already exists
+
+    conn.commit()
+
+    # Backfill existing rows so the explainer never sees NULL reason_code
+    conn.execute(
+        "UPDATE owner_sentiment SET reason_code = 'legacy_unknown' WHERE reason_code IS NULL"
+    )
     conn.commit()
 
 

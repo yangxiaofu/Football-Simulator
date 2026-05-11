@@ -28,6 +28,8 @@ Save format: One `.db` file per franchise (SQLite database)
 ├── run_offseason.py       ← CLI: offseason management (Phase 3)
 ├── run_stress_test.py     ← CLI: multi-season stress test (Phase 4)
 ├── view_records.py        ← CLI: league records and history viewer (Phase 4)
+├── view_stats.py          ← CLI: in-season stats viewer (Phase 5)
+├── view_sentiment.py      ← CLI: owner + player sentiment viewer (Phase 5 P8)
 ├── docs/                  ← Game Design Documents (read before implementing any system)
 │   ├── gdd/               ← authoritative GDDs (timeless, read before implementing any system)
 │   │   ├── GDD_Layer1_CoreDesign.md
@@ -94,7 +96,8 @@ Save format: One `.db` file per franchise (SQLite database)
 │   │   ├── peer_ranking.py      ← coach career peer rankings (Phase 4 Prompt #7)
 │   │   ├── narrative_beats.py   ← end-of-season narrative generation (Phase 4 Prompt #9)
 │   │   ├── weekly_stats.py      ← weekly + season running stat aggregation (Phase 5)
-│   │   └── stars_selection.py   ← Stars of the Week selection algorithm (Phase 5)
+│   │   ├── stars_selection.py   ← Stars of the Week selection algorithm (Phase 5)
+│   │   └── sentiment_explainer.py ← top-contributors logic for sentiment (Phase 5 P8)
 │   ├── transactions/      ← trades, free agency, contracts, draft, coaching
 │   │   ├── contracts.py         ← contract signing, restructuring, release, market value
 │   │   ├── satisfaction.py      ← weekly evaluation, warning signals, interventions, contagion
@@ -121,13 +124,15 @@ Save format: One `.db` file per franchise (SQLite database)
 │   │   ├── career_view.py       ← coach career view (Phase 4 Prompt #9)
 │   │   ├── dramatic_moments.py  ← dynasty/HOF moment rendering (Phase 4 Prompt #9)
 │   │   ├── trade_view.py        ← trade evaluation display (Phase 5 Prompt #6)
+│   │   ├── sentiment_view.py    ← sentiment display module (Phase 5 P8)
 │   │   └── colors.py            ← ANSI color helpers
 │   └── utils/             ← shared helpers, constants, probability functions
 │       ├── constants.py         ← all tuning constants, thresholds, position lists
 │       ├── ai_behavior_matrix.py ← 5x5 personality×phase behavior grid (Phase 4)
 │       ├── press_templates.py   ← 30 press conference templates across 8 contexts (Phase 4 Prompt #5)
 │       ├── tier2_templates.py   ← 24 dramatic press templates (Phase 4 Prompt #6)
-│       └── star_templates.py    ← 40 Stars of the Week narrative templates (Phase 5 Prompt #4)
+│       ├── star_templates.py    ← 40 Stars of the Week narrative templates (Phase 5 Prompt #4)
+│       └── pitch_meeting_templates.py  ← FA pitch narrative templates (Phase 5 P7)
 ├── tests/
 │   └── verify/            ← Phase 4 verification scripts
 │       ├── verify_phase4_p1.py      ← coach identity schema
@@ -145,7 +150,9 @@ Save format: One `.db` file per franchise (SQLite database)
 │       ├── verify_phase5_p3.py      ← depth chart system
 │       ├── verify_phase5_p4.py      ← Stars of the Week
 │       ├── verify_phase5_p5.py      ← Tier 2 streak trigger + lineup controversy
-│       └── verify_phase5_p6.py      ← trade depth
+│       ├── verify_phase5_p6.py      ← trade depth
+│       ├── verify_phase5_p7.py      ← FA pitch narrative + typed rejection reasons
+│       └── verify_phase5_p8.py      ← sentiment transparency
 ├── saves/                 ← franchise .db files (gitignored)
 └── assets/                ← future UI assets (logos, fonts)
 ```
@@ -371,6 +378,22 @@ Goal: Weekly stat aggregation, leaderboards, Stars of the Week, and enhanced med
   - `--player-value`, `--estimate-trade`, `--shop-player` on `run_season.py`
   - `src/ui/trade_view.py` display module
   - Verification: `python tests/verify/verify_phase5_p6.py` (15/15)
+- [x] **Prompt #7**: FA Pitch Narrative + Outcome Narratives + Typed FA Rejection Reasons
+  - `src/utils/pitch_meeting_templates.py` (≥20 templates across 6 signal types)
+  - `generate_outcome_narrative()` in `free_agency.py`; `pitch_narratives` key added to `request_pitch_meeting()` return
+  - `FA_REJECTION_REASONS` dict + `PITCH_SIGNAL_*` constants in `constants.py`
+  - `outcome_narrative` + `reason_code` columns on `fa_interest` (via `ensure_fa_tables` migration)
+  - 3 new query helpers in `queries.py`
+  - Verification: `verify_phase5_p7.py` (15/15)
+- [x] **Prompt #8**: Sentiment Transparency
+  - `src/league/sentiment_explainer.py` (top-contributors logic, no inline SQL)
+  - `OWNER_SENTIMENT_REASONS` (≥10 keys) + `PLAYER_SATISFACTION_REASONS` (≥8 keys) in `constants.py`
+  - `reason_code`/`reason_detail` on `owner_sentiment`; `reason_code` on `satisfaction_event` (via migrations)
+  - `view_sentiment.py --owner | --player | --all-players` CLI + `src/ui/sentiment_view.py` display
+  - Weekly sentiment summary embed in `season.py`
+  - `depth_chart.py` `_maybe_queue_lineup_controversy` updated to write `reason_code='lineup_controversy'`
+  - 4 new query helpers in `queries.py`
+  - Verification: `verify_phase5_p8.py` (15/15)
 
 **Phase 5 In Progress...**
 
