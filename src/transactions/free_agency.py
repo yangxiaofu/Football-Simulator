@@ -51,10 +51,14 @@ from ..db.queries import (
     get_unsigned_free_agents_by_position,
     has_player_history_with_team,
     count_accepted_fa_offers,
+    # Phase 5 P7
+    update_fa_interest_outcome,
+    get_fa_interest_with_outcome,
 )
 from ..db.transactions import log_transaction
 from .contracts import offer_contract, get_market_value
 from .satisfaction import adjust_satisfaction, apply_intervention
+from ..utils.pitch_meeting_templates import PITCH_TEMPLATES
 from ..utils.constants import (
     INTEREST_TIER_1,
     INTEREST_TIER_2,
@@ -102,7 +106,133 @@ from ..utils.constants import (
     FA_VETERAN_PRESTIGE_THRESHOLD,
     FA_AI_TOLERANCE_MULTIPLIER,
     to_letter_grade,
+    # Phase 5 P7
+    FA_REJECTION_REASONS,
+    PITCH_SIGNAL_INTEREST_LEVEL,
+    PITCH_SIGNAL_COMPETING_OFFER,
+    PITCH_SIGNAL_AGENT_POSTURE,
+    PITCH_SIGNAL_FIT_VIBE,
+    PITCH_SIGNAL_MONEY_PRIMARY,
+    PITCH_SIGNAL_WINNING_PRIMARY,
 )
+
+
+# ================================================================
+# Phase 5 P7 — Outcome narrative templates (module scope)
+# ================================================================
+
+_OUTCOME_NARRATIVES = {
+    ('signed_with_user', 'high_fit'): (
+        "{PLAYER_NAME} signed with {TEAM_NAME}. "
+        "The scheme fit and team culture were the deciding factors — "
+        "he turned down a slightly richer deal to land here."
+    ),
+    ('signed_with_user', 'winning'): (
+        "{PLAYER_NAME} chose {TEAM_NAME} and made no secret of why: "
+        "he believes this roster gives him the best shot at a ring."
+    ),
+    ('signed_with_user', 'general'): (
+        "{PLAYER_NAME} agreed to terms with {TEAM_NAME}. "
+        "Both sides found a number that worked and the deal came together quickly."
+    ),
+    ('signed_elsewhere', 'preferred_contender'): (
+        "{PLAYER_NAME} signed with {RIVAL_TEAM_NAME}. "
+        "He prioritized winning above all else and felt they were the stronger contender."
+    ),
+    ('signed_elsewhere', 'preferred_money'): (
+        "{PLAYER_NAME} agreed to a deal with {RIVAL_TEAM_NAME}. "
+        "The financial offer was simply too good to walk away from."
+    ),
+    ('signed_elsewhere', 'general'): (
+        "{PLAYER_NAME} signed elsewhere. "
+        "The fit with {RIVAL_TEAM_NAME} ultimately proved more compelling."
+    ),
+    ('declined', 'preferred_money'): (
+        "{PLAYER_NAME} declined the offer. "
+        "His market rate was higher than the terms presented — "
+        "he'll continue exploring his options."
+    ),
+    ('declined', 'preferred_contender'): (
+        "{PLAYER_NAME} passed on the deal. "
+        "At this stage of his career, he's focused on competing for a championship."
+    ),
+    ('declined', 'no_agreement_terms'): (
+        "{PLAYER_NAME} and {TEAM_NAME} couldn't find common ground on the contract. "
+        "Talks broke off without a counter."
+    ),
+    ('declined', 'preferred_role'): (
+        "{PLAYER_NAME} walked away from the offer. "
+        "He's looking for a situation where he can be a featured contributor."
+    ),
+    ('unsigned', 'general'): (
+        "{PLAYER_NAME} remains unsigned. "
+        "No deal has come together yet, but the market is still open."
+    ),
+}
+
+
+# ================================================================
+# Phase 5 P7 — Private pitch/outcome helpers
+# ================================================================
+
+def _get_active_signals(emphasis: str, tier: int) -> list[tuple]:
+    """Return list of (signal_type, intensity) pairs for the pitch context."""
+    tier_to_intensity = {1: 'high', 2: 'medium', 3: 'low'}
+    intensity = tier_to_intensity.get(tier, 'low')
+
+    signals = [(PITCH_SIGNAL_INTEREST_LEVEL, intensity)]
+
+    if emphasis == 'winning':
+        signals.append((PITCH_SIGNAL_WINNING_PRIMARY, intensity))
+    elif emphasis == 'money_first':
+        signals.append((PITCH_SIGNAL_MONEY_PRIMARY, 'high'))
+        signals.append((PITCH_SIGNAL_AGENT_POSTURE, 'high'))
+    elif emphasis in ('scheme_fit', 'role'):
+        signals.append((PITCH_SIGNAL_FIT_VIBE, intensity))
+
+    # 30% random chance of a competing-offer signal
+    if random.random() < 0.30:
+        signals.append((PITCH_SIGNAL_COMPETING_OFFER, intensity))
+
+    return signals
+
+
+def _select_pitch_templates(
+    signals: list[tuple],
+    context: dict,
+) -> list[str]:
+    """Pick one filled template per active signal type.
+
+    Args:
+        signals: List of (signal_type, intensity) pairs from _get_active_signals().
+        context: Token dict for slot-filling.
+
+    Returns:
+        List of rendered narrative strings (one per signal type).
+    """
+    seen_signal_types: set = set()
+    results: list[str] = []
+
+    for signal_type, intensity in signals:
+        if signal_type in seen_signal_types:
+            continue
+        for tmpl in PITCH_TEMPLATES:
+            if tmpl['signal_type'] != signal_type:
+                continue
+            if tmpl['intensity'] != intensity:
+                continue
+            match_fn = tmpl.get('match')
+            if match_fn is not None and not match_fn(context):
+                continue
+            # Slot-fill the template
+            text = tmpl['template']
+            for token, value in context.items():
+                text = text.replace('{' + token.upper() + '}', str(value))
+            results.append(text)
+            seen_signal_types.add(signal_type)
+            break
+
+    return results
 
 
 # ================================================================
@@ -450,12 +580,38 @@ def request_pitch_meeting(
         )
 
     current_tier = interest['tier']
+
+    # Phase 5 P7 — build pitch context for narrative templates
+    player = get_player_for_contract(conn, player_id)
+    player_name = (
+        f"{player['first_name']} {player['last_name']}" if player
+        else f"Player {player_id}"
+    )
+    team = get_team(conn, team_id)
+    team_name = team['abbreviation'] if team else f"Team {team_id}"
+    # Pick a random rival team for competing-offer narrative
+    all_teams = get_all_teams(conn)
+    rival_teams = [t for t in all_teams if t['id'] != team_id]
+    rival_name = random.choice(rival_teams)['abbreviation'] if rival_teams else 'another team'
+    pitch_ctx = {
+        'player_name': player_name,
+        'position': player['position'] if player else '',
+        'team_name': team_name,
+        'rival_team_name': rival_name,
+        'agent_name': f"{player_name}'s agent",
+        'offer_years': 0,
+        'offer_value_m': 0,
+    }
+    active_signals = _get_active_signals(emphasis, current_tier)
+    pitch_narratives = _select_pitch_templates(active_signals, pitch_ctx)
+
     if current_tier == INTEREST_TIER_1:
         return {
             'outcome': 'neutral',
             'tier_change': 0,
             'message': "He's already highly interested — no pitch needed.",
             'new_tier': INTEREST_TIER_1,
+            'pitch_narratives': pitch_narratives,
         }
     if current_tier == INTEREST_TIER_3:
         raise ValueError(
@@ -483,6 +639,7 @@ def request_pitch_meeting(
                         "His agent says they're looking elsewhere now."
                     ),
                     'new_tier': new_tier,
+                    'pitch_narratives': pitch_narratives,
                 }
             return {
                 'outcome': 'failure',
@@ -492,6 +649,7 @@ def request_pitch_meeting(
                     "He's still willing to listen but wasn't moved."
                 ),
                 'new_tier': INTEREST_TIER_2,
+                'pitch_narratives': pitch_narratives,
             }
 
     # Map emphasis to satisfaction motivation and call apply_intervention
@@ -509,6 +667,7 @@ def request_pitch_meeting(
             'tier_change': 0,
             'message': str(e),
             'new_tier': INTEREST_TIER_2,
+            'pitch_narratives': pitch_narratives,
         }
 
     if intervention['success']:
@@ -522,6 +681,7 @@ def request_pitch_meeting(
             'tier_change': 1,
             'message': intervention['message'],
             'new_tier': new_tier,
+            'pitch_narratives': pitch_narratives,
         }
     else:
         # Failed pitch — chance of dropping to Tier 3
@@ -541,6 +701,7 @@ def request_pitch_meeting(
             'tier_change': tier_change,
             'message': intervention['message'],
             'new_tier': new_tier,
+            'pitch_narratives': pitch_narratives,
         }
 
 
@@ -790,11 +951,147 @@ def resolve_offer(
         else:
             update_fa_offer_status(conn, offer_id, 'rejected')
 
+    # Phase 5 P7 — generate and persist outcome narrative for key outcomes
+    if response in ('accepted', 'walked', 'shopped'):
+        interest = get_fa_interest(conn, player_id, team_id, season_year)
+        if interest:
+            outcome_type_map = {
+                'accepted': 'signed_with_user',
+                'walked': 'declined',
+                'shopped': 'signed_elsewhere',
+            }
+            outcome_type = outcome_type_map[response]
+            rival_team_id = None
+            if response == 'shopped':
+                other_interests = get_fa_interests_for_player(
+                    conn, player_id, season_year
+                )
+                for oi in other_interests:
+                    if oi['team_id'] != team_id:
+                        rival_team_id = oi['team_id']
+                        break
+            outcome = generate_outcome_narrative(
+                conn, interest, outcome_type, outcome_team_id=rival_team_id
+            )
+            with conn:
+                update_fa_interest_outcome(
+                    conn, interest['id'],
+                    outcome['narrative'], outcome.get('reason_code'),
+                )
+            message += f"\n{outcome['narrative']}"
+
     return {
         'response': response,
         'counter_terms': counter_terms,
         'message': message,
         'signed': signed,
+    }
+
+
+def generate_outcome_narrative(
+    conn: sqlite3.Connection,
+    fa_interest_row,
+    outcome_type: str,
+    outcome_team_id: Optional[int] = None,
+) -> dict:
+    """Generate 1-2 sentence narrative for a resolved FA outcome.
+
+    Args:
+        conn: Database connection.
+        fa_interest_row: Row from fa_interest table.
+        outcome_type: One of 'signed_with_user' | 'signed_elsewhere' | 'declined' | 'unsigned'.
+        outcome_team_id: Team the player signed with (for signed_elsewhere).
+
+    Returns:
+        Dict with 'narrative' (str) and 'reason_code' (str|None).
+        reason_code is only set when outcome_type == 'declined'.
+    """
+    tier = fa_interest_row['tier'] if fa_interest_row['tier'] else 2
+    player_id = fa_interest_row['player_id']
+    team_id = fa_interest_row['team_id']
+
+    # Get names for token filling
+    player = get_player_for_contract(conn, player_id)
+    player_name = (
+        f"{player['first_name']} {player['last_name']}" if player
+        else f"Player {player_id}"
+    )
+    team = get_team(conn, team_id)
+    team_name = team['abbreviation'] if team else f"Team {team_id}"
+
+    rival_name = "another team"
+    if outcome_team_id:
+        rival_team = get_team(conn, outcome_team_id)
+        if rival_team:
+            rival_name = rival_team['abbreviation']
+    elif outcome_type == 'signed_elsewhere':
+        # Find the rival team from fa_interest records
+        league = get_league_state(conn)
+        season_year = league['current_season'] if league else 0
+        other_interests = get_fa_interests_for_player(conn, player_id, season_year)
+        for oi in other_interests:
+            if oi['team_id'] != team_id:
+                rival_team = get_team(conn, oi['team_id'])
+                if rival_team:
+                    rival_name = rival_team['abbreviation']
+                break
+
+    ctx = {
+        'player_name': player_name,
+        'team_name': team_name,
+        'rival_team_name': rival_name,
+    }
+
+    # Determine narrative key and reason_code
+    reason_code = None
+
+    if outcome_type == 'signed_with_user':
+        if tier == INTEREST_TIER_1:
+            # Check if strong preference — pick flavor
+            pref = fa_interest_row['preference_score'] if fa_interest_row['preference_score'] else 0
+            sub_key = 'high_fit' if pref >= 70 else 'winning' if pref >= 50 else 'general'
+        else:
+            sub_key = 'general'
+        narrative_key = ('signed_with_user', sub_key)
+
+    elif outcome_type == 'signed_elsewhere':
+        if tier == INTEREST_TIER_1:
+            sub_key = 'preferred_contender'
+        else:
+            sub_key = 'general'
+        narrative_key = ('signed_elsewhere', sub_key)
+
+    elif outcome_type == 'declined':
+        if tier == INTEREST_TIER_1:
+            reasons = ['preferred_contender', 'preferred_money']
+        elif tier == INTEREST_TIER_2:
+            reasons = ['no_agreement_terms', 'preferred_role']
+        else:
+            reasons = ['no_agreement_terms']
+        reason_code = random.choice(reasons)
+        narrative_key = ('declined', reason_code)
+
+    else:  # unsigned or unknown
+        narrative_key = ('unsigned', 'general')
+
+    template = _OUTCOME_NARRATIVES.get(
+        narrative_key,
+        _OUTCOME_NARRATIVES.get(
+            (outcome_type, 'general'),
+            "{PLAYER_NAME}'s situation remains unresolved.",
+        )
+    )
+
+    if isinstance(template, str):
+        narrative = template
+        for token, value in ctx.items():
+            narrative = narrative.replace('{' + token.upper() + '}', str(value))
+    else:
+        narrative = str(template)
+
+    return {
+        'narrative': narrative,
+        'reason_code': reason_code,
     }
 
 

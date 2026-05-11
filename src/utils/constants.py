@@ -1108,6 +1108,35 @@ TRADE_SHOP_MODERATE_INTEREST_PCT = 0.50   # 50-80% → MODERATE
 TRADE_SHOP_LOW_INTEREST_PCT      = 0.20   # 20-50% → LOW
 # Below 20% → NO interest
 
+# Phase 5 P7 — FA Rejection reason codes (parallel to TRADE_REJECTION_REASONS)
+FA_REJECTION_REASONS = {
+    'preferred_money':       'preferred a competing offer with more money',
+    'preferred_contender':   'preferred a contender for a chance to win now',
+    'preferred_scheme_fit':  'preferred a system that better fits his game',
+    'preferred_location':    'preferred to stay close to home / a different market',
+    'preferred_role':        'wanted a larger role or featured snaps',
+    'no_agreement_terms':    'could not agree on contract terms',
+    'stayed_with_team':      'preferred to remain with his current team',
+    'cap_structure_concern': 'concerned about contract structure / guarantees',
+}
+
+# Phase 5 P7 — Pitch meeting signal type identifiers
+PITCH_SIGNAL_INTEREST_LEVEL  = 'interest_level'
+PITCH_SIGNAL_COMPETING_OFFER = 'competing_offer'
+PITCH_SIGNAL_AGENT_POSTURE   = 'agent_posture'
+PITCH_SIGNAL_FIT_VIBE        = 'fit_vibe'
+PITCH_SIGNAL_MONEY_PRIMARY   = 'money_primary'
+PITCH_SIGNAL_WINNING_PRIMARY = 'winning_primary'
+
+PITCH_SIGNAL_TYPES = (
+    PITCH_SIGNAL_INTEREST_LEVEL,
+    PITCH_SIGNAL_COMPETING_OFFER,
+    PITCH_SIGNAL_AGENT_POSTURE,
+    PITCH_SIGNAL_FIT_VIBE,
+    PITCH_SIGNAL_MONEY_PRIMARY,
+    PITCH_SIGNAL_WINNING_PRIMARY,
+)
+
 # ======================
 # PLAYER SATISFACTION
 # ======================

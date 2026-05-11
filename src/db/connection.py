@@ -356,6 +356,17 @@ def ensure_fa_tables(conn: sqlite3.Connection) -> None:
     """)
     conn.commit()
 
+    # Phase 5 P7 — add outcome columns idempotently
+    for col_def in [
+        "ALTER TABLE fa_interest ADD COLUMN outcome_narrative TEXT",
+        "ALTER TABLE fa_interest ADD COLUMN reason_code TEXT",
+    ]:
+        try:
+            conn.execute(col_def)
+        except Exception:
+            pass  # column already exists
+    conn.commit()
+
 
 def ensure_franchise_tag_table(conn: sqlite3.Connection) -> None:
     """

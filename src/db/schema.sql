@@ -443,6 +443,9 @@ CREATE TABLE IF NOT EXISTS fa_interest (
 
 CREATE INDEX IF NOT EXISTS idx_fa_interest_player ON fa_interest(player_id, season_year);
 CREATE INDEX IF NOT EXISTS idx_fa_interest_team ON fa_interest(team_id, season_year);
+-- Phase 5 P7 additions (applied via ensure_fa_tables migration):
+--   ALTER TABLE fa_interest ADD COLUMN outcome_narrative TEXT;
+--   ALTER TABLE fa_interest ADD COLUMN reason_code TEXT;
 
 -- Tracks franchise tag applications
 CREATE TABLE IF NOT EXISTS franchise_tag (

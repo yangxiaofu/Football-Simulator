@@ -29,13 +29,29 @@ Save format: One `.db` file per franchise (SQLite database)
 ├── run_stress_test.py     ← CLI: multi-season stress test (Phase 4)
 ├── view_records.py        ← CLI: league records and history viewer (Phase 4)
 ├── docs/                  ← Game Design Documents (read before implementing any system)
-│   ├── GDD_Layer1_CoreDesign.md
-│   ├── GDD_Layer2_SimulationSpec.md
-│   ├── GDD_Layer2B_TransactionOffseason.md
-│   ├── GDD_Layer3_DataModel.md
-│   ├── GDD_Layer4_FeatureRoadmap.md
-│   ├── Phase4_StressTest_BaselineFindings.md
-│   └── Phase4_ShipGate_Report.md
+│   ├── gdd/               ← authoritative GDDs (timeless, read before implementing any system)
+│   │   ├── GDD_Layer1_CoreDesign.md
+│   │   ├── GDD_Layer2_SimulationSpec.md
+│   │   ├── GDD_Layer2B_TransactionOffseason.md
+│   │   ├── GDD_Layer3_DataModel.md
+│   │   └── GDD_Layer4_FeatureRoadmap.md
+│   ├── design/            ← per-phase design decisions and starting points
+│   │   ├── Phase4_DesignDecisions.md
+│   │   ├── Phase5_DesignDecisions.md
+│   │   ├── Phase5_StartingPoint.md
+│   │   └── Phase6_RealRosters_DesignNotes.md
+│   ├── reports/           ← findings, ship gates, stress tests, implementation summaries
+│   │   ├── Phase4_StressTest_BaselineFindings.md
+│   │   ├── Phase4_ShipGate_Report.md
+│   │   ├── Phase4_FirstPlaythrough_Findings.md
+│   │   ├── Phase4_Prompt4_ImplementationSummary.md
+│   │   ├── Phase4_Prompt7_ImplementationSummary.md
+│   │   ├── Phase4_Prompt8_ImplementationSummary.md
+│   │   ├── Phase5_Prompt3_ImplementationSummary.md
+│   │   ├── Phase5_Prompt3_CleanupSummary.md
+│   │   └── RefactorSummary.md
+│   ├── build_prompts/     ← Claude Code build prompts (flat, one file per prompt)
+│   └── ui/                ← GUI design docs (Phase 6)
 ├── src/                   ← all Python source code
 │   ├── db/                ← schema, migrations, connection helpers
 │   │   ├── schema.sql           ← full SQLite schema
@@ -142,16 +158,16 @@ Before implementing any system, read the relevant GDD section. The GDDs are the 
 
 | System | Primary Reference |
 |---|---|
-| Game vision, core loop, dynasty design | `docs/GDD_Layer1_CoreDesign.md` |
-| Scouting system (college + free agents) | `docs/GDD_Layer1_CoreDesign.md` §13 |
-| Play resolution engine, ratings, fatigue | `docs/GDD_Layer2_SimulationSpec.md` |
-| Injury system, weather, special teams | `docs/GDD_Layer2_SimulationSpec.md` §5–7 |
-| Free agency, contracts, trades, draft | `docs/GDD_Layer2B_TransactionOffseason.md` |
-| Player satisfaction, holdouts, retirements | `docs/GDD_Layer2B_TransactionOffseason.md` §7 |
-| Full SQLite schema (all tables) | `docs/GDD_Layer3_DataModel.md` |
-| Build order, phase exit criteria | `docs/GDD_Layer4_FeatureRoadmap.md` |
-| Coach identity, media, dynasty, exit criteria | `docs/Phase4_DesignDecisions.md` |
-| Phase 4 ship gate validation results | `docs/Phase4_ShipGate_Report.md` |
+| Game vision, core loop, dynasty design | `docs/gdd/GDD_Layer1_CoreDesign.md` |
+| Scouting system (college + free agents) | `docs/gdd/GDD_Layer1_CoreDesign.md` §13 |
+| Play resolution engine, ratings, fatigue | `docs/gdd/GDD_Layer2_SimulationSpec.md` |
+| Injury system, weather, special teams | `docs/gdd/GDD_Layer2_SimulationSpec.md` §5–7 |
+| Free agency, contracts, trades, draft | `docs/gdd/GDD_Layer2B_TransactionOffseason.md` |
+| Player satisfaction, holdouts, retirements | `docs/gdd/GDD_Layer2B_TransactionOffseason.md` §7 |
+| Full SQLite schema (all tables) | `docs/gdd/GDD_Layer3_DataModel.md` |
+| Build order, phase exit criteria | `docs/gdd/GDD_Layer4_FeatureRoadmap.md` |
+| Coach identity, media, dynasty, exit criteria | `docs/design/Phase4_DesignDecisions.md` |
+| Phase 4 ship gate validation results | `docs/reports/Phase4_ShipGate_Report.md` |
 
 ---
 
@@ -438,7 +454,7 @@ SELECT * FROM team LIMIT 5;  # Query example
 ```
 
 ### Schema Validation
-The schema is defined in `src/db/schema.sql` and must match `docs/GDD_Layer3_DataModel.md` exactly. When modifying the schema:
+The schema is defined in `src/db/schema.sql` and must match `docs/gdd/GDD_Layer3_DataModel.md` exactly. When modifying the schema:
 1. Update `src/db/schema.sql`
 2. Update the corresponding GDD section
 3. Test with a fresh database creation

@@ -1607,6 +1607,46 @@ def count_accepted_fa_offers(
     return row['cnt']
 
 
+def update_fa_interest_outcome(
+    conn: sqlite3.Connection,
+    fa_interest_id: int,
+    outcome_narrative: str,
+    reason_code: Optional[str] = None,
+) -> None:
+    """Persist outcome narrative and reason_code on fa_interest row."""
+    conn.execute(
+        "UPDATE fa_interest SET outcome_narrative=?, reason_code=? WHERE id=?",
+        (outcome_narrative, reason_code, fa_interest_id),
+    )
+
+
+def get_fa_interest_with_outcome(
+    conn: sqlite3.Connection, fa_interest_id: int,
+) -> Optional[sqlite3.Row]:
+    """Return fa_interest row including outcome_narrative and reason_code."""
+    return conn.execute(
+        "SELECT * FROM fa_interest WHERE id=?", (fa_interest_id,)
+    ).fetchone()
+
+
+def get_fa_outcomes_for_season(
+    conn: sqlite3.Connection,
+    season_year: int,
+    team_id: Optional[int] = None,
+) -> list[sqlite3.Row]:
+    """Return fa_interest rows for a season that have outcome_narrative set."""
+    if team_id:
+        return conn.execute(
+            "SELECT * FROM fa_interest WHERE season_year=? AND team_id=? "
+            "AND outcome_narrative IS NOT NULL",
+            (season_year, team_id),
+        ).fetchall()
+    return conn.execute(
+        "SELECT * FROM fa_interest WHERE season_year=? AND outcome_narrative IS NOT NULL",
+        (season_year,),
+    ).fetchall()
+
+
 # ======================
 # FRANCHISE TAG QUERIES
 # ======================
