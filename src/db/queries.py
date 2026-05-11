@@ -4594,3 +4594,38 @@ def get_team_id_for_player(
     """Return the team_id for a player, or None if not found."""
     info = get_player_trade_info(conn, player_id)
     return info['team_id'] if info else None
+
+
+# Phase 5 Prompt #9 — Press Conference Variety (LRU anti-repetition)
+
+def get_recent_template_ids_for_coach_context(
+    conn: sqlite3.Connection,
+    coach_id: int,
+    context: str,
+    limit: int,
+) -> list:
+    """Return the last `limit` template_ids used by this coach in this context, most-recent first.
+
+    Only returns rows where template_id IS NOT NULL (i.e., resolved events with P9 data).
+    Legacy rows with NULL template_id are treated as if they never happened.
+    """
+    rows = conn.execute("""
+        SELECT template_id FROM press_event
+        WHERE coach_id = ? AND context_type = ?
+          AND template_id IS NOT NULL
+        ORDER BY id DESC LIMIT ?
+    """, (coach_id, context, limit)).fetchall()
+    return [r['template_id'] for r in rows]
+
+
+def write_press_event_template_id(
+    conn: sqlite3.Connection,
+    press_event_id: int,
+    template_id: str,
+) -> None:
+    """Write template_id to a press_event row (standalone helper for tests and direct callers)."""
+    with conn:
+        conn.execute(
+            "UPDATE press_event SET template_id = ? WHERE id = ?",
+            (template_id, press_event_id)
+        )

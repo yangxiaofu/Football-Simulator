@@ -954,6 +954,12 @@ def ensure_press_tables(conn: sqlite3.Connection) -> None:
     except sqlite3.OperationalError:
         pass  # Column already exists
 
+    # Phase 5 P9: add template_id for LRU anti-repetition guard
+    try:
+        conn.execute("ALTER TABLE press_event ADD COLUMN template_id TEXT")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
     conn.commit()
 
 

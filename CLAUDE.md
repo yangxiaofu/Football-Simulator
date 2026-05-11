@@ -394,6 +394,13 @@ Goal: Weekly stat aggregation, leaderboards, Stars of the Week, and enhanced med
   - `depth_chart.py` `_maybe_queue_lineup_controversy` updated to write `reason_code='lineup_controversy'`
   - 4 new query helpers in `queries.py`
   - Verification: `verify_phase5_p8.py` (15/15)
+- [x] **Prompt #9**: Press Conference Variety Expansion
+  - 14 contexts (8→14: post_win/post_loss splits + post_starter_injury + 6 previously-unimplemented: mid_season_grind, pre_division_game, post_injury_critical, pre_playoff_game, post_clinching, post_eliminated)
+  - 87 Tier 1 templates (31 migrated to new context strings + 56 new; ≥5 per context floor)
+  - LRU anti-repetition guard (N=3) via `press_event.template_id`; `select_template_for_context()` in `press_conference.py`
+  - `get_recent_template_ids_for_coach_context` + `write_press_event_template_id` in `queries.py`
+  - 14 `PRESS_CONTEXT_*` constants + LRU/threshold constants in `constants.py`
+  - Verification: `python tests/verify/verify_phase5_p9.py saves/phase5_p9_test.db` (15/15)
 
 **Phase 5 In Progress...**
 

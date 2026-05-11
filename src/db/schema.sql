@@ -1104,6 +1104,7 @@ CREATE TABLE IF NOT EXISTS press_event (
     delta_locker_room       INTEGER NOT NULL DEFAULT 0,
     resolved_at             TEXT,
     created_at              TEXT NOT NULL DEFAULT (datetime('now')),
+    template_id             TEXT,                    -- Phase 5 P9: written at resolve time for LRU anti-repetition
     FOREIGN KEY (team_id) REFERENCES team(id),
     FOREIGN KEY (coach_id) REFERENCES coach_career(id),
     UNIQUE(season_year, week_number, team_id)

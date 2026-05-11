@@ -2409,3 +2409,35 @@ MAX_DEPTH_PER_POSITION = 3  # slot_order 1, 2, 3
 
 # Injury statuses that trigger auto-promotion
 AUTO_PROMOTE_INJURY_STATUSES = ['Out', 'IR', 'PUP']
+
+# ====================
+# Phase 5 P9 — Press Conference Variety
+# ====================
+
+# LRU anti-repetition guard
+PRESS_LRU_EXCLUDE_COUNT = 3        # exclude last N templates per coach per context
+PRESS_MIN_POOL_FALLBACK = 4        # if pool drops below this after LRU exclusion, use LRU fallback
+
+# Context thresholds
+PRESS_BLOWOUT_MARGIN_THRESHOLD = 17   # >=17 point margin -> blowout sub-context
+PRESS_NARROW_MARGIN_THRESHOLD = 7     # <=7 point margin -> narrow sub-context
+PRESS_UPSET_WIN_DELTA = 1             # user needs more wins than opponent to be considered favored
+PRESS_CLINCH_WIN_THRESHOLD = 10       # wins >= this at week >= 15 -> treat as clinching
+PRESS_ELIMINATE_WIN_THRESHOLD = 4     # wins <= this at week >= 14 -> treat as eliminated
+PRESS_STARTER_INJURY_MIN_WEEKS = 2    # injury_weeks_remaining >= this -> counts as key starter injured
+
+# 14 named Tier 1 contexts (7 new P9 + 7 existing made explicit via constants)
+PRESS_CONTEXT_POST_WIN_BLOWOUT      = 'post_win_blowout'
+PRESS_CONTEXT_POST_WIN_NARROW       = 'post_win_narrow'
+PRESS_CONTEXT_POST_WIN_VS_RIVAL     = 'post_win_vs_rival'
+PRESS_CONTEXT_POST_LOSS_BLOWOUT     = 'post_loss_blowout'
+PRESS_CONTEXT_POST_LOSS_CLOSE       = 'post_loss_close'
+PRESS_CONTEXT_POST_LOSS_UPSET       = 'post_loss_upset'
+PRESS_CONTEXT_POST_STARTER_INJURY   = 'post_starter_injury'
+PRESS_CONTEXT_MID_SEASON_GRIND      = 'mid_season_grind'
+PRESS_CONTEXT_PRE_DIVISION_GAME     = 'pre_division_game'
+PRESS_CONTEXT_POST_INJURY_CRITICAL  = 'post_injury_critical'
+PRESS_CONTEXT_PRE_PLAYOFF_GAME      = 'pre_playoff_game'
+PRESS_CONTEXT_POST_CLINCHING        = 'post_clinching'
+PRESS_CONTEXT_POST_ELIMINATED       = 'post_eliminated'
+PRESS_CONTEXT_LINEUP_CONTROVERSY    = 'lineup_controversy'  # same value as TIER1_CONTEXT_LINEUP_CONTROVERSY

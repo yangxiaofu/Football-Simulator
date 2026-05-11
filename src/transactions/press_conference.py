@@ -24,8 +24,30 @@ from src.utils.constants import (
     SENTIMENT_MIN,
     SENTIMENT_MAX,
     FAN_SENTIMENT_DEFAULT,
+    # Phase 5 P9 — new context/LRU constants
+    PRESS_BLOWOUT_MARGIN_THRESHOLD,
+    PRESS_UPSET_WIN_DELTA,
+    PRESS_CLINCH_WIN_THRESHOLD,
+    PRESS_ELIMINATE_WIN_THRESHOLD,
+    PRESS_STARTER_INJURY_MIN_WEEKS,
+    PRESS_LRU_EXCLUDE_COUNT,
+    PRESS_MIN_POOL_FALLBACK,
+    PRESS_CONTEXT_POST_WIN_BLOWOUT,
+    PRESS_CONTEXT_POST_WIN_NARROW,
+    PRESS_CONTEXT_POST_WIN_VS_RIVAL,
+    PRESS_CONTEXT_POST_LOSS_BLOWOUT,
+    PRESS_CONTEXT_POST_LOSS_CLOSE,
+    PRESS_CONTEXT_POST_LOSS_UPSET,
+    PRESS_CONTEXT_POST_STARTER_INJURY,
+    PRESS_CONTEXT_MID_SEASON_GRIND,
+    PRESS_CONTEXT_PRE_DIVISION_GAME,
+    PRESS_CONTEXT_POST_INJURY_CRITICAL,
+    PRESS_CONTEXT_PRE_PLAYOFF_GAME,
+    PRESS_CONTEXT_POST_CLINCHING,
+    PRESS_CONTEXT_POST_ELIMINATED,
 )
 from src.utils.press_templates import get_templates_by_context, get_template_by_id
+from src.db import queries
 from src.db.queries import update_sentiment_drivers, get_owner_sentiment
 from src.transactions.satisfaction import adjust_satisfaction
 
@@ -39,26 +61,23 @@ def detect_context(
     """
     Detect the press conference context based on recent game results.
 
-    Priority order:
-    1. Losing streak (3+ consecutive losses)
-    2. Winning streak (3+ consecutive wins)
-    3. Blowout win (14+ point margin)
-    4. Blowout loss (14+ point margin)
-    5. Division loss
-    6. Simple post_win
-    7. Simple post_loss
-    8. Routine (fallback)
-
-    Args:
-        conn: Database connection
-        team_id: Team ID
-        season_year: Season year
-        week_number: Week number (1-17)
-
-    Returns:
-        Context type string
+    Phase 5 P9 priority order:
+    1. lineup_controversy (P5, highest priority)
+    2. post_starter_injury (key starter went down this week)
+    3. post_clinching (just clinched a playoff spot)
+    4. post_eliminated (just got eliminated)
+    5. losing_streak (3+ consecutive losses)
+    6. winning_streak (3+ consecutive wins)
+    7. Post-game sub-contexts:
+       - post_win_vs_rival, post_win_blowout, post_win_narrow
+       - post_loss_blowout, post_loss_upset, post_loss_close
+    8. post_injury_critical (any critical 'Out' injury this week via depth chart)
+    9. pre_playoff_game (week 15+, in playoff position, not clinched)
+    10. pre_division_game (next week is a division game)
+    11. mid_season_grind (weeks 10-14, no other trigger)
+    12. routine (fallback)
     """
-    # Phase 5 P5: lineup controversy takes highest priority
+    # Priority 1: lineup controversy (P5)
     from ..db.queries import check_lineup_controversy_queued
     from ..utils.constants import TIER1_CONTEXT_LINEUP_CONTROVERSY
     if check_lineup_controversy_queued(conn, team_id, season_year, week_number):
@@ -88,19 +107,33 @@ def detect_context(
     """, (season_year, week_number, team_id, team_id)).fetchone()
 
     if not game:
-        return 'routine'  # No game this week (shouldn't happen in regular season)
+        # No game this week — check pre-game/bye contexts
+        return _detect_no_game_context(conn, team_id, season_year, week_number)
 
     # Determine if team won and margin
     is_home = game['home_team_id'] == team_id
     team_score = game['home_score'] if is_home else game['away_score']
     opp_score = game['away_score'] if is_home else game['home_score']
+    opp_team_id = game['away_team_id'] if is_home else game['home_team_id']
     margin = abs(team_score - opp_score)
     won = team_score > opp_score
     opp_division = game['away_division'] if is_home else game['home_division']
     team_division = game['home_division'] if is_home else game['away_division']
     is_division_game = opp_division == team_division
 
-    # Check for streaks (last 3 games including this one)
+    # Priority 2: starter injury this week (via depth chart auto-promotion)
+    if _had_starter_injury_this_week(conn, team_id, season_year):
+        return PRESS_CONTEXT_POST_STARTER_INJURY
+
+    # Priority 3: clinching
+    if _just_clinched(conn, team_id, season_year, week_number):
+        return PRESS_CONTEXT_POST_CLINCHING
+
+    # Priority 4: elimination
+    if _just_eliminated(conn, team_id, season_year, week_number):
+        return PRESS_CONTEXT_POST_ELIMINATED
+
+    # Priority 5–6: streaks (last 3 completed games including this one)
     last_3_games = conn.execute("""
         SELECT
             CASE
@@ -120,23 +153,199 @@ def detect_context(
         LIMIT 3
     """, (team_id, season_year, week_number, team_id, team_id)).fetchall()
 
-    if len(last_3_games) >= 3:
+    if len(last_3_games) >= PRESS_LOSING_STREAK_THRESHOLD:
         results = [g['won'] for g in last_3_games]
         if all(r == 0 for r in results):
             return 'losing_streak'
         if all(r == 1 for r in results):
             return 'winning_streak'
 
-    # Check for blowout
-    if margin >= PRESS_BLOWOUT_MARGIN:
-        return 'post_blowout_win' if won else 'post_blowout_loss'
+    # Priority 7: post-game sub-contexts (blowout check before rival — a 20-pt blowout
+    # is more notable as a dominant win than as a rivalry result)
+    if won:
+        if margin >= PRESS_BLOWOUT_MARGIN_THRESHOLD:
+            return PRESS_CONTEXT_POST_WIN_BLOWOUT
+        if is_division_game:
+            return PRESS_CONTEXT_POST_WIN_VS_RIVAL
+        return PRESS_CONTEXT_POST_WIN_NARROW
+    else:
+        if margin >= PRESS_BLOWOUT_MARGIN_THRESHOLD:
+            return PRESS_CONTEXT_POST_LOSS_BLOWOUT
+        if _was_user_favored(conn, team_id, opp_team_id, season_year):
+            return PRESS_CONTEXT_POST_LOSS_UPSET
+        return PRESS_CONTEXT_POST_LOSS_CLOSE
 
-    # Check for division loss
-    if not won and is_division_game:
-        return 'post_division_loss'
+    # Priority 8 and beyond handled by _detect_no_game_context (unreachable here)
 
-    # Simple win/loss
-    return 'post_win' if won else 'post_loss'
+
+def _had_starter_injury_this_week(
+    conn: sqlite3.Connection,
+    team_id: int,
+    season_year: int,
+) -> bool:
+    """Return True if a depth-chart starter (slot_order=1) was auto-promoted this season,
+    and the replaced player has injury_weeks_remaining >= PRESS_STARTER_INJURY_MIN_WEEKS."""
+    row = conn.execute("""
+        SELECT 1 FROM depth_chart dc
+        JOIN player p ON p.id = dc.replaced_player_id
+        WHERE dc.team_id = ?
+          AND dc.season_year = ?
+          AND dc.slot_order = 1
+          AND dc.replaced_player_id IS NOT NULL
+          AND p.injury_weeks_remaining >= ?
+        LIMIT 1
+    """, (team_id, season_year, PRESS_STARTER_INJURY_MIN_WEEKS)).fetchone()
+    return row is not None
+
+
+def _just_clinched(
+    conn: sqlite3.Connection,
+    team_id: int,
+    season_year: int,
+    week_number: int,
+) -> bool:
+    """Heuristic: wins >= PRESS_CLINCH_WIN_THRESHOLD at week >= 15 and not already clinched this week."""
+    if week_number < 15:
+        return False
+    row = conn.execute("""
+        SELECT wins FROM team_season_running
+        WHERE team_id = ? AND season_year = ? AND is_playoff = 0
+    """, (team_id, season_year)).fetchone()
+    if not row:
+        return False
+    # Only fire once: clinch threshold exactly crossed (wins == threshold at this week)
+    return row['wins'] == PRESS_CLINCH_WIN_THRESHOLD
+
+
+def _just_eliminated(
+    conn: sqlite3.Connection,
+    team_id: int,
+    season_year: int,
+    week_number: int,
+) -> bool:
+    """Heuristic: wins <= PRESS_ELIMINATE_WIN_THRESHOLD at week >= 14."""
+    if week_number < 14:
+        return False
+    row = conn.execute("""
+        SELECT wins FROM team_season_running
+        WHERE team_id = ? AND season_year = ? AND is_playoff = 0
+    """, (team_id, season_year)).fetchone()
+    if not row:
+        return False
+    return row['wins'] <= PRESS_ELIMINATE_WIN_THRESHOLD
+
+
+def _was_user_favored(
+    conn: sqlite3.Connection,
+    team_id: int,
+    opp_team_id: int,
+    season_year: int,
+) -> bool:
+    """Proxy: return True if user team has more wins than opponent this season."""
+    user_row = conn.execute("""
+        SELECT wins FROM team_season_running
+        WHERE team_id = ? AND season_year = ? AND is_playoff = 0
+    """, (team_id, season_year)).fetchone()
+    opp_row = conn.execute("""
+        SELECT wins FROM team_season_running
+        WHERE team_id = ? AND season_year = ? AND is_playoff = 0
+    """, (opp_team_id, season_year)).fetchone()
+    if not user_row or not opp_row:
+        return False
+    return user_row['wins'] > opp_row['wins'] + PRESS_UPSET_WIN_DELTA - 1
+
+
+def _detect_no_game_context(
+    conn: sqlite3.Connection,
+    team_id: int,
+    season_year: int,
+    week_number: int,
+) -> str:
+    """Detect context when no game was played this week (bye, pre-season, etc.)."""
+    # post_injury_critical: any player with 'Out' status on the roster
+    critical_injury = conn.execute("""
+        SELECT 1 FROM player
+        WHERE team_id = ? AND injury_status = 'Out' AND is_active = 1
+        LIMIT 1
+    """, (team_id,)).fetchone()
+    if critical_injury:
+        return PRESS_CONTEXT_POST_INJURY_CRITICAL
+
+    # pre_playoff_game: week 15+ and team is in playoff position (winning record)
+    if week_number >= 15:
+        record = conn.execute("""
+            SELECT wins, losses FROM team_season_running
+            WHERE team_id = ? AND season_year = ? AND is_playoff = 0
+        """, (team_id, season_year)).fetchone()
+        if record and record['wins'] >= PRESS_CLINCH_WIN_THRESHOLD - 2:
+            return PRESS_CONTEXT_PRE_PLAYOFF_GAME
+
+    # pre_division_game: next week's game is vs a division opponent
+    next_game = conn.execute("""
+        SELECT
+            g.home_team_id,
+            g.away_team_id,
+            home_div.name as home_division,
+            away_div.name as away_division
+        FROM game g
+        JOIN week w ON g.week_id = w.id
+        JOIN season s ON w.season_id = s.id
+        JOIN team home ON g.home_team_id = home.id
+        JOIN division home_div ON home.division_id = home_div.id
+        JOIN team away ON g.away_team_id = away.id
+        JOIN division away_div ON away.division_id = away_div.id
+        WHERE s.year = ?
+          AND w.week_number = ?
+          AND (g.home_team_id = ? OR g.away_team_id = ?)
+          AND g.is_complete = 0
+        LIMIT 1
+    """, (season_year, week_number + 1, team_id, team_id)).fetchone()
+
+    if next_game:
+        is_home = next_game['home_team_id'] == team_id
+        team_div = next_game['home_division'] if is_home else next_game['away_division']
+        opp_div = next_game['away_division'] if is_home else next_game['home_division']
+        if team_div == opp_div:
+            return PRESS_CONTEXT_PRE_DIVISION_GAME
+
+    # mid_season_grind: weeks 10-14
+    if 10 <= week_number <= 14:
+        return PRESS_CONTEXT_MID_SEASON_GRIND
+
+    return 'routine'
+
+
+def select_template_for_context(
+    conn: sqlite3.Connection,
+    context: str,
+    coach_id: int,
+) -> dict:
+    """Phase 5 P9: LRU anti-repetition guard.
+
+    Excludes the last PRESS_LRU_EXCLUDE_COUNT templates used by this coach in this context.
+    Falls back to least-recently-used if the candidate pool drops below PRESS_MIN_POOL_FALLBACK.
+    """
+    all_templates = get_templates_by_context(context)
+    if not all_templates:
+        return random.choice(get_templates_by_context('routine'))
+
+    recent_ids = queries.get_recent_template_ids_for_coach_context(
+        conn, coach_id, context, limit=PRESS_LRU_EXCLUDE_COUNT
+    )
+
+    candidate_pool = [t for t in all_templates if t['id'] not in recent_ids]
+
+    if len(candidate_pool) >= PRESS_MIN_POOL_FALLBACK:
+        return random.choice(candidate_pool)
+
+    # Pool too thin — pick the template used LONGEST ago (last item in recent_ids)
+    if recent_ids:
+        lru_id = recent_ids[-1]
+        for t in all_templates:
+            if t['id'] == lru_id:
+                return t
+
+    return random.choice(all_templates)
 
 
 def generate_weekly_press_event(
@@ -193,10 +402,9 @@ def generate_weekly_press_event(
             'delta_locker_room': event['delta_locker_room'],
         }
 
-    # Detect context and pick random template
+    # Detect context and pick template (LRU anti-repetition guard)
     context = detect_context(conn, team_id, season_year, week_number)
-    templates = get_templates_by_context(context)
-    template = random.choice(templates)
+    template = select_template_for_context(conn, context, coach_id)
 
     # Create press_event row
     with conn:
@@ -338,7 +546,7 @@ def resolve_press_event(
                 conn
             )
 
-    # Update press_event
+    # Update press_event — also copy question_template_id → template_id for LRU guard
     with conn:
         conn.execute("""
             UPDATE press_event
@@ -347,7 +555,8 @@ def resolve_press_event(
                 delta_owner = ?,
                 delta_fan = ?,
                 delta_locker_room = ?,
-                resolved_at = ?
+                resolved_at = ?,
+                template_id = question_template_id
             WHERE id = ?
         """, (response_choice, 1 if is_autopilot else 0, delta_owner, delta_fan,
               delta_locker_room, datetime.now().isoformat(), press_event_id))
