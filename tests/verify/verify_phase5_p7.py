@@ -212,6 +212,9 @@ def check_layer_boundaries():
 def check_p1_through_p6_regression(save_path):
     print("\nGuard 4 — P1-P6 regression (all prior verify scripts)")
     ok = True
+    # Later scripts chain earlier ones (each has its own stress-test guard),
+    # so timeouts increase to account for nested runtimes.
+    timeouts = {1: 300, 2: 300, 3: 300, 4: 600, 5: 900, 6: 1200}
     for i in range(1, 7):
         script = os.path.join('tests', 'verify', f'verify_phase5_p{i}.py')
         if not os.path.isfile(script):
@@ -220,7 +223,7 @@ def check_p1_through_p6_regression(save_path):
             continue
         result = subprocess.run(
             [sys.executable, script, save_path],
-            capture_output=True, text=True, timeout=300,
+            capture_output=True, text=True, timeout=timeouts[i],
         )
         passed = result.returncode == 0
         _record(f"verify_phase5_p{i}.py exits 0", passed,
@@ -549,7 +552,10 @@ def check_existing_phase3_fa_logic_intact(save_path):
     conn = get_connection(save_path)
     ensure_fa_tables(conn)
     try:
-        result = get_fa_market_status(conn)
+        # get_fa_market_status signature: (season_year, conn)
+        league = conn.execute("SELECT current_season FROM league LIMIT 1").fetchone()
+        season_year = league[0] if league else 2024
+        result = get_fa_market_status(season_year, conn)
         ok = result is not None
         _record("get_fa_market_status() returns non-None result", ok,
                 "" if ok else "returned None")
