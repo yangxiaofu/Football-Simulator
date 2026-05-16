@@ -11,8 +11,65 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A deep, text-based NFL franchise simulator inspired by Out of the Park Baseball. The player acts as both General Manager and Head Coach of a fictional NFL franchise, building a dynasty across multiple seasons through smart drafting, cap management, and scheme decisions.
 
 Target platform: **Steam (Windows)**
-Tech stack: **Python 3.11+ / SQLite**
+Tech stack: **Python 3.11+ / SQLite** — standard library only, zero external dependencies. `requirements.txt` is intentionally empty (documents future optional deps in comments).
 Save format: One `.db` file per franchise (SQLite database)
+
+---
+
+## Common Commands
+
+All commands are run from the project root. Saves live in `saves/` (gitignored).
+
+```bash
+# 1. Create a new franchise (always step 1 for any fresh save)
+python generate.py saves/<name>.db --season 2024
+# Optional player-coach flags: --coach-first-name --coach-last-name --coach-archetype
+
+# 2. Roster / stats inspection
+python query_roster.py saves/<name>.db --team CHI
+python view_stats.py saves/<name>.db --leaderboard passing --top 10
+python view_stats.py saves/<name>.db --stars --week 5
+python view_sentiment.py saves/<name>.db --owner
+python view_records.py saves/<name>.db
+
+# 3. Simulate
+python simulate_game.py saves/<name>.db --home ATL --away CLE --week 1
+python run_season.py saves/<name>.db --advance-week
+python run_season.py saves/<name>.db --complete-season
+python run_season.py saves/<name>.db --standings
+python run_season.py saves/<name>.db --depth-chart --team CHI
+
+# 4. Offseason (10-phase loop: review → tags → scouting → FA → draft → camp)
+python run_offseason.py saves/<name>.db                  # status header
+python run_offseason.py saves/<name>.db --advance-phase
+python run_offseason.py saves/<name>.db --draft-board
+python run_offseason.py saves/<name>.db --mock-draft
+
+# 5. Multi-season stress harness (headless)
+python run_stress_test.py saves/<name>.db --seasons 3
+```
+
+### Running Verification Tests
+
+There is no pytest config. Verification is per-phase scripts that each create their own scratch DB, run a scenario, and exit 0/1. Run a single script directly:
+
+```bash
+python tests/verify/verify_phase5_p4.py                       # most scripts self-bootstrap a fresh save
+python tests/verify/verify_phase5_p9.py saves/scratch.db      # some take an explicit DB path
+python tests/verify/verify_phase5_shipgate.py                 # full 2-season playthrough + 10-season smoke
+python tests/verify/verify_phase5_shipgate.py --skip-smoke    # fast iteration; final gate MUST NOT skip
+```
+
+Ship gate scripts write a report to `docs/reports/PhaseN_ShipGate_Report.md`. The `tests/test_db/`, `tests/test_generation/`, `tests/test_engine/` packages are empty placeholders — actual coverage lives entirely in `tests/verify/`.
+
+### Database Inspection
+
+```bash
+sqlite3 saves/<name>.db
+# .tables / .schema <table> / .mode column / .headers on
+```
+
+The schema is **applied via `src/db/schema.sql` plus a chain of `ensure_*` migration helpers in `src/db/connection.py`** (e.g. `ensure_coach_tables`, `ensure_fa_tables`, `ensure_offseason_state_table`, `ensure_press_tables`, `ensure_scouting_tables`). Older saves are forward-migrated on connect — new tables/columns added in later phases live in these helpers, NOT only in `schema.sql`. When adding a new table or column post-Phase-0, add both an `ensure_*` helper AND the canonical definition in `schema.sql`.
 
 ---
 
@@ -51,6 +108,7 @@ Save format: One `.db` file per franchise (SQLite database)
 │   │   ├── Phase4_Prompt8_ImplementationSummary.md
 │   │   ├── Phase5_Prompt3_ImplementationSummary.md
 │   │   ├── Phase5_Prompt3_CleanupSummary.md
+│   │   ├── Phase5_ShipGate_Report.md
 │   │   └── RefactorSummary.md
 │   ├── build_prompts/     ← Claude Code build prompts (flat, one file per prompt)
 │   └── ui/                ← GUI design docs (Phase 6)
@@ -97,7 +155,8 @@ Save format: One `.db` file per franchise (SQLite database)
 │   │   ├── narrative_beats.py   ← end-of-season narrative generation (Phase 4 Prompt #9)
 │   │   ├── weekly_stats.py      ← weekly + season running stat aggregation (Phase 5)
 │   │   ├── stars_selection.py   ← Stars of the Week selection algorithm (Phase 5)
-│   │   └── sentiment_explainer.py ← top-contributors logic for sentiment (Phase 5 P8)
+│   │   ├── sentiment_explainer.py ← top-contributors logic for sentiment (Phase 5 P8)
+│   │   └── season_recap.py      ← year-over-year recap, once per season (Phase 5 P10)
 │   ├── transactions/      ← trades, free agency, contracts, draft, coaching
 │   │   ├── contracts.py         ← contract signing, restructuring, release, market value
 │   │   ├── satisfaction.py      ← weekly evaluation, warning signals, interventions, contagion
@@ -125,6 +184,7 @@ Save format: One `.db` file per franchise (SQLite database)
 │   │   ├── dramatic_moments.py  ← dynasty/HOF moment rendering (Phase 4 Prompt #9)
 │   │   ├── trade_view.py        ← trade evaluation display (Phase 5 Prompt #6)
 │   │   ├── sentiment_view.py    ← sentiment display module (Phase 5 P8)
+│   │   ├── draft_board_display.py ← draft board views: mock slot, interest, combine standouts (Phase 5 P11)
 │   │   └── colors.py            ← ANSI color helpers
 │   └── utils/             ← shared helpers, constants, probability functions
 │       ├── constants.py         ← all tuning constants, thresholds, position lists
@@ -152,7 +212,11 @@ Save format: One `.db` file per franchise (SQLite database)
 │       ├── verify_phase5_p5.py      ← Tier 2 streak trigger + lineup controversy
 │       ├── verify_phase5_p6.py      ← trade depth
 │       ├── verify_phase5_p7.py      ← FA pitch narrative + typed rejection reasons
-│       └── verify_phase5_p8.py      ← sentiment transparency
+│       ├── verify_phase5_p8.py      ← sentiment transparency
+│       ├── verify_phase5_p9.py      ← press conference variety
+│       ├── verify_phase5_p10.py     ← season transition flow polish
+│       ├── verify_phase5_p11.py     ← draft board polish
+│       └── verify_phase5_shipgate.py ← Phase 5 ship gate (4 guards + 11 criteria; 2-season playthrough + 10-season smoke; report at docs/reports/Phase5_ShipGate_Report.md)
 ├── saves/                 ← franchise .db files (gitignored)
 └── assets/                ← future UI assets (logos, fonts)
 ```
@@ -179,6 +243,15 @@ Before implementing any system, read the relevant GDD section. The GDDs are the 
 ---
 
 ## Current Build Phase
+
+**Phases 0–5 complete. Phase 6 (Real NFL Rosters + GUI) is next.**
+
+- Phase 6 direction: stat-derived rating model from nflfastR/PFR data (NOT Madden scraping). 2026 draft class sourced from Brugler's "The Beast." See `docs/design/Phase6_RealRosters_DesignNotes.md` and `docs/ui/` for GUI framework selection (pywebview + PyInstaller, locked 2026-05-09).
+- Before starting any Phase 6 work, run the second full playthrough planned in the Phase 5 ship gate report.
+
+Per-phase historical checklists are kept below for traceability.
+
+---
 
 **Phase 0 — Foundation** ✅
 
@@ -336,7 +409,7 @@ Goal: Coach identity as a first-class entity, portable careers, media/pressure s
 
 ---
 
-**Phase 5 — In-Season Stats & Media** (In Progress)
+**Phase 5 — In-Season Stats & Media** ✅
 
 Goal: Weekly stat aggregation, leaderboards, Stars of the Week, and enhanced media system.
 
@@ -401,8 +474,56 @@ Goal: Weekly stat aggregation, leaderboards, Stars of the Week, and enhanced med
   - `get_recent_template_ids_for_coach_context` + `write_press_event_template_id` in `queries.py`
   - 14 `PRESS_CONTEXT_*` constants + LRU/threshold constants in `constants.py`
   - Verification: `python tests/verify/verify_phase5_p9.py saves/phase5_p9_test.db` (15/15)
+- [x] **Prompt #10**: Season Transition Flow Polish
+  - Rich season-end summary after Super Bowl (consumes Phase 4 narrative_beats + ui/season_summary.py)
+  - Sequenced awards reveal (interactive) vs flat list (headless) via `AWARDS_REVEAL_*` constants
+  - HOF inductions as side-effect callback when advancing from free_agency phase (no DB constraint change); `OFFSEASON_PHASE_HALL_OF_FAME` in `OFFSEASON_PHASE_SEQUENCE`
+  - Coaching carousel summary via `render_coaching_carousel_summary()` in `coaching_carousel.py`
+  - Offseason status header on every `run_offseason.py` command via `render_offseason_status_header()`
+  - Year-over-year recap: `src/league/season_recap.py` + `season.recap_shown` column (idempotent migration)
+  - Verification: `python tests/verify/verify_phase5_p10.py saves/phase5_p10_test.db` (15/15)
+- [x] **Prompt #11**: Draft Board Polish
+  - `--draft-board` on `run_offseason.py`: inline mock slot + top-3 interest per prospect + combine standouts header + positional run risk warnings
+  - `--mock-draft`: full 32-pick mock draft (latest published week), user pick marked with ◄
+  - `--combine-standouts`: standalone combine risers/fallers derived from `combine_event.grade_impact`
+  - `--prospect <id>`: per-prospect detail with combine measurements + position-group percentile bars + interest teams + mock slot
+  - `subparsers(required=False)` to allow top-level flags alongside existing subcommands
+  - 8 new query helpers in `queries.py`; `src/ui/draft_board_display.py` (pure presentation, zero SQL)
+  - No new schema, no new top-level CLI entry point
+  - Verification: `python tests/verify/verify_phase5_p11.py saves/phase5_p11_test.db` (15/15)
+- [x] **Prompt #12**: Phase 5 Ship Gate Verification
+  - `tests/verify/verify_phase5_shipgate.py` (4 mandatory guards + 11 ship gate criteria)
+  - 2-season full playthrough setup (required for FA market activity and year-over-year recap)
+  - 10-season smoke test (criterion 11); report written to `docs/reports/Phase5_ShipGate_Report.md`
+  - Bugfix: `get_team_playoff_finish` in `queries.py` — joined `game→week→season` instead of referencing non-existent `game.season_year`/`game.week_number` columns
+  - Verification: `python tests/verify/verify_phase5_shipgate.py` (15/15, smoke enabled)
+- [x] Phase 5 refactor pass (CLAUDE.md compliance: SQL audit, magic number harvest, constant naming reconciliation, tech-debt log at `docs/reports/Phase5_TechDebt_Log.md`)
 
-**Phase 5 In Progress...**
+**Phase 5 Complete!** ✅
+
+---
+
+## Runtime Flow (How Systems Hook Together)
+
+The file tree above shows *what* each module does. This section shows *how* they fire during normal play — useful when tracing a bug or adding a new hook.
+
+**Single game (`simulate_game.py` or called from season loop)**
+`game_sim.py` orchestrates: coin toss → `play_caller` selects play → `play_pass`/`play_run`/`play_special` resolves it via `matchup.matchup_probability(SAR_a, SAR_d)` (logistic with `MATCHUP_K`) → `ratings.py` provides SAR (never raw `true_overall` outside engine) → `fatigue` + `injury` + `weather` modifiers apply → `stats.py` accumulates in memory → end of game writes `box_score`, `play`, `key_play` rows. `game_sim` reads starters from `depth_chart` (Phase 5), so depth-chart edits change lineups.
+
+**Week advance (`run_season.py --advance-week` → `src/league/season.py`)**
+For each game in the week: run `game_sim` → write stats → after all games finish: `weekly_stats.py` recomputes `player_week_stats` / `player_season_running` / `team_*` from SUM of `box_score` (idempotent) → `stars_selection.py` populates `weekly_award` → `tier2_triggers.py` checks for `rising_star_streak` (W-3 guard), losing streaks, blockbuster trades, etc., and dispatches `tier2_press_conference` events → `satisfaction.py` runs weekly player evaluation → `depth_chart.process_injury_fallback` / `process_healing_restoration` → `owner_sentiment.update_sentiment_drivers` rolls up the week → CLI prompts user for a Tier 1 press conference (or autopilot in headless mode). `lineup_controversy` is queued via `transaction_log` when a healthy A-grade starter is replaced by a C-grade.
+
+**Season end (after Super Bowl)**
+`playoffs.py` finishes the bracket → `archive.py` aggregates `box_score` → `player_season_stats`/`player_career_stats`, then *deletes `play` rows* (key_play is kept permanently) → `development.py` ages/develops players → `awards.py` picks MVP/OPOY/DPOY/Pro Bowl/All-Pro → `legacy.py` updates coach legacy scores → `narrative_beats.py` builds the season-end story → `season_recap.py` renders year-over-year recap once (gated by `season.recap_shown`).
+
+**Offseason (`run_offseason.py` → `src/league/offseason.py`)**
+10-phase sequence stored in `offseason_state`: `review → franchise_tags → scouting → free_agency → hall_of_fame → draft → rookie_signing → roster_cuts → camp → reset`. Each `--advance-phase` mutates `offseason_state` and triggers the appropriate subsystem in `src/transactions/` or `src/scouting/`. HOF inductions are a side-effect callback when leaving `free_agency` (no schema change for the phase itself).
+
+**Coach identity (Phase 4, critical invariant)**
+A `coach_career` row is the durable identity; `coach_tenure` rows are the team-by-team history. *All* coach reassignments must go through `transactions/coaching.assign_coach_to_team()` — this is the single mutation point that maintains Invariants #11–12. Never UPDATE `team.head_coach_id` directly. `coaching_carousel.py` is the AI fire/hire logic that calls this helper.
+
+**Cross-cutting: invariants & health**
+`src/league/invariants.py` runs a 12-check battery against any save (referenced by stress harness and ship gates). `health_report.py` is the diagnostic counterpart. Both are intentionally SQL-heavy — see "Refactor Exceptions" below.
 
 ---
 
@@ -634,7 +755,7 @@ Do not refactor after every individual file — only after a full module is work
 | `src/ui/` | Display only | Compute anything; call engine or db directly |
 | `src/utils/` | Shared helpers and constants | Import from other `src/` modules (utils is dependency-free) |
 
-### Phase 4 Refactor Exceptions
+### Refactor Exceptions
 
 The following modules have documented exceptions to the "no inline SQL" rule:
 
@@ -659,6 +780,14 @@ The following modules have documented exceptions to the "no inline SQL" rule:
 - **Rationale**: Complex analytics with dynamic record book queries
 - **Pattern**: Similar to health_report.py (analytics/reporting)
 
+**src/transactions/tier2_triggers.py** (13–15 queries)
+- **Rationale**: Event-trigger dispatch — interleaves DB queries with in-memory conditional branching. INSERT guard must be atomic with the trigger decision. Multi-step detectors (blockbuster trade, losing streak) loop over result sets with per-row sub-queries; splitting would require passing complex state. The 6 simpler SELECTs could be extracted but leaving them in produces a more coherent, locally-reasoned module.
+- **Pattern**: Similar to coaching.py (tightly coupled multi-step transaction)
+
+**src/league/weekly_stats.py** (8 queries)
+- **Rationale**: Aggregation engine — its purpose IS to execute the SUM/aggregation SQL that recomputes running totals. All 8 queries are the core of the recompute pipeline, not incidental data access.
+- **Pattern**: Similar to invariants.py (module purpose = executing DB logic)
+
 These exceptions are documented and accepted as architecturally sound.
 
 ---
@@ -666,15 +795,17 @@ These exceptions are documented and accepted as architecturally sound.
 ## Phase Build Sequence
 
 ```
-Phase 0  (Weeks 1–3)   Foundation — schema, generation, data layer
-Phase 1  (Weeks 4–10)  Simulation Engine — play resolution, narration, injuries
-Phase 2  (Weeks 11–14) Full Season — season loop, playoffs, archive, development
-Phase 3  (Weeks 15–20) Offseason Loop — FA, contracts, trades, scouting, draft
-Phase 4  (Weeks 21–26) Dynasty — 3-season stability, legacy score, media/pressure
+Phase 0  Foundation         — schema, generation, data layer                       ✅
+Phase 1  Simulation Engine  — play resolution, narration, injuries                 ✅
+Phase 2  Full Season        — season loop, playoffs, archive, development          ✅
+Phase 3  Offseason Loop     — FA, contracts, trades, scouting, draft               ✅
+Phase 4  Dynasty            — 3-season stability, legacy score, media/pressure     ✅
+Phase 5  In-Season Media    — weekly stats, Stars of the Week, sentiment, polish   ✅
+Phase 6  Real Rosters + GUI — stat-derived ratings, pywebview frontend             ← next
 ```
 
 **The one rule: never build UI for a system that isn't working.**
-Run the phase exit criteria before advancing to the next phase.
+Run the phase exit criteria before advancing to the next phase. Phase 6 GUI work does NOT start until the second full playthrough validates Phase 5 in practice.
 
 ---
 
