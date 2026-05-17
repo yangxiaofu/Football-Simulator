@@ -1181,6 +1181,16 @@ PLAYER_SATISFACTION_REASONS = {
 SENTIMENT_TOP_CONTRIBUTORS_COUNT = 5   # top N deltas shown per sentiment query
 SENTIMENT_WEEKLY_SUMMARY_TOP_COUNT = 3 # top N shown in weekly summary embed
 
+# Phase 5 Refactor Pass — Extracted Constants
+# Sentiment explainer display tiers (sentiment_explainer.py)
+SATISFACTION_DISPLAY_CONTENT_THRESHOLD = 70
+SATISFACTION_DISPLAY_NEUTRAL_THRESHOLD = 50
+SATISFACTION_DISPLAY_FRUSTRATED_THRESHOLD = 30
+SATISFACTION_CONCERN_THRESHOLD = 40    # default concern threshold for --all-players view
+
+# Trade view gap coloring (trade_view.py)
+TRADE_VIEW_GAP_RED_THRESHOLD = -5      # % gap below which color goes from yellow to red
+
 # ======================
 # PLAYER SATISFACTION
 # ======================
@@ -1939,6 +1949,7 @@ OFFSEASON_PHASE_SEQUENCE = [
     "scouting_early",
     "combine",
     "free_agency",
+    "hall_of_fame_induction",  # P10: virtual phase — fires as callback, never stored in DB
     "predraft",
     "draft",
     "training_camp",
@@ -1960,6 +1971,55 @@ OFFSEASON_PHASE_NARRATIVES = {
     'training_camp': "Training camp. Cut to 53 before Week 1.",
     'season_ready': "Roster set for {next_season} season.",
 }
+
+# === Front Office Hub Modes ===
+FO_MODE_IN_SEASON               = "in_season"
+FO_MODE_POSTSEASON              = "postseason"
+FO_MODE_OFFSEASON_REVIEW        = "offseason_review"
+FO_MODE_OFFSEASON_STAFF_EVAL    = "offseason_staff_eval"
+FO_MODE_OFFSEASON_FRANCHISE_TAGS = "offseason_franchise_tags"
+FO_MODE_OFFSEASON_SCOUTING      = "offseason_scouting"
+FO_MODE_OFFSEASON_COMBINE       = "offseason_combine"
+FO_MODE_OFFSEASON_FREE_AGENCY   = "offseason_free_agency"
+FO_MODE_OFFSEASON_PREDRAFT      = "offseason_predraft"
+FO_MODE_OFFSEASON_DRAFT         = "offseason_draft"
+FO_MODE_OFFSEASON_CAMP          = "offseason_camp"
+FO_MODE_OFFSEASON_COMPLETE      = "offseason_complete"
+
+# Maps league.current_phase → FO mode (non-offseason phases)
+FO_LEAGUE_PHASE_MAP = {
+    "regular":   FO_MODE_IN_SEASON,
+    "preseason": FO_MODE_IN_SEASON,
+    "playoffs":  FO_MODE_POSTSEASON,
+}
+
+# Maps offseason_state.current_phase → FO mode
+FO_OFFSEASON_PHASE_MAP = {
+    "end_of_season_review": FO_MODE_OFFSEASON_REVIEW,
+    "staff_evaluation":     FO_MODE_OFFSEASON_STAFF_EVAL,
+    "franchise_tag_window": FO_MODE_OFFSEASON_FRANCHISE_TAGS,
+    "scouting_early":       FO_MODE_OFFSEASON_SCOUTING,
+    "combine":              FO_MODE_OFFSEASON_COMBINE,
+    "free_agency":          FO_MODE_OFFSEASON_FREE_AGENCY,
+    "predraft":             FO_MODE_OFFSEASON_PREDRAFT,
+    "draft":                FO_MODE_OFFSEASON_DRAFT,
+    "training_camp":        FO_MODE_OFFSEASON_CAMP,
+    "season_ready":         FO_MODE_OFFSEASON_COMPLETE,
+}
+
+# Sub-nav phase groups: (display_label, [db_phases], subnav_key)
+# Maps multiple DB phases to one rail item; state = completed/active/upcoming
+FO_SUB_NAV_PHASE_GROUPS = [
+    ("Review",      ["end_of_season_review", "staff_evaluation"], "review"),
+    ("Tags",        ["franchise_tag_window"],                      "tags"),
+    ("Scouting",    ["scouting_early", "combine"],                "scouting"),
+    ("Free Agency", ["free_agency"],                              "free_agency"),
+    ("Draft",       ["predraft", "draft"],                        "draft"),
+    ("Camp",        ["training_camp", "season_ready"],            "camp"),
+]
+
+# Placeholder route base for unbuilt FO sub-screens
+FO_PLACEHOLDER_ROUTE = "#/placeholder"
 
 
 def from_letter_grade(grade: str) -> int:
@@ -2441,3 +2501,261 @@ PRESS_CONTEXT_PRE_PLAYOFF_GAME      = 'pre_playoff_game'
 PRESS_CONTEXT_POST_CLINCHING        = 'post_clinching'
 PRESS_CONTEXT_POST_ELIMINATED       = 'post_eliminated'
 PRESS_CONTEXT_LINEUP_CONTROVERSY    = 'lineup_controversy'  # same value as TIER1_CONTEXT_LINEUP_CONTROVERSY
+
+# ==============================================================================
+# Phase 5 P10 — Season Transition Flow
+# ==============================================================================
+
+OFFSEASON_PHASE_HALL_OF_FAME = 'hall_of_fame_induction'  # conceptual phase; fires as callback, never stored in DB
+AWARDS_REVEAL_INTERACTIVE = 'sequenced'
+AWARDS_REVEAL_HEADLESS = 'list'
+OFFSEASON_STATUS_HEADER_WIDTH = 70
+AWARDS_SETUP_LINES = {
+    'MVP': "And the league's Most Valuable Player is...",
+    'All-Pro': "All-Pro selections:",
+    'Pro Bowl': "Pro Bowl selections:",
+}
+
+# ==============================================================================
+# Phase 5 P11 — Draft Board Polish
+# ==============================================================================
+
+DRAFT_BOARD_INTEREST_TIERS_TO_SHOW = 3   # top N teams per prospect on board view
+DRAFT_BOARD_POSITIONAL_RUN_THRESHOLD = 5  # ≥N picks of same position in top window = run
+DRAFT_BOARD_POSITIONAL_RUN_TOP_N = 10     # window size for run detection
+
+COMBINE_STANDOUTS_RISERS_COUNT = 3        # top N risers to show
+COMBINE_STANDOUTS_FALLERS_COUNT = 3       # top N fallers to show
+COMBINE_STANDOUTS_MIN_MOVEMENT = 3        # min abs(grade_impact) to qualify
+
+# Position groups for combine percentile comparison
+COMBINE_POSITION_GROUPS = {
+    'QB':    ['QB'],
+    'SKILL': ['RB', 'FB', 'WR', 'TE'],
+    'OL':    ['OL', 'LT', 'LG', 'C', 'RG', 'RT'],
+    'DL':    ['DL', 'DE', 'DT', 'NT'],
+    'LB':    ['LB', 'OLB', 'MLB', 'ILB'],
+    'DB':    ['CB', 'FS', 'SS', 'S'],
+    'ST':    ['K', 'P', 'LS'],
+}
+
+# Signal type → interest tier mapping (from INTEL_SIGNAL_TYPES)
+INTEL_SIGNAL_HIGH = frozenset({'visit', 'private_workout', 'rumored_trade_up'})
+INTEL_SIGNAL_MODERATE = frozenset({'combine_attention'})
+INTEL_SIGNAL_LOW = frozenset({'board_drop'})
+
+# ---------------------------------------------------------------------------
+# PHASE 6 — GUI WINDOW
+# ---------------------------------------------------------------------------
+
+WINDOW_TITLE = "Football Simulator"
+WINDOW_WIDTH = 1440
+WINDOW_HEIGHT = 900
+WINDOW_MIN_WIDTH = 1280
+WINDOW_MIN_HEIGHT = 720
+
+# Short month abbreviations used by presenters/formatters.py
+MONTH_ABBR = {
+    1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr",
+    5: "May", 6: "Jun", 7: "Jul", 8: "Aug",
+    9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec",
+}
+
+# ---------------------------------------------------------------------------
+# PHASE 6 PROMPT 3 — ROSTER + PLAYER CARD
+# ---------------------------------------------------------------------------
+
+PLAYER_CARD_KEY_ATTRS = {
+    "QB": [("Throw Power","true_arm_strength"),("Throw Accuracy","true_accuracy_mid"),
+           ("Pocket Awareness","true_pocket_presence"),("Mobility","true_elusiveness"),
+           ("Football IQ","true_football_iq"),("Clutch","true_clutch")],
+    "RB": [("Speed","true_speed"),("Vision","true_vision"),("Elusiveness","true_elusiveness"),
+           ("Blocking","true_blocking"),("Strength","true_strength"),("Durability","true_durability")],
+    "WR": [("Speed","true_speed"),("Route Running","true_route_running"),("Catch","true_catch"),
+           ("YAC","true_yac"),("Football IQ","true_football_iq"),("Durability","true_durability")],
+    "TE": [("Catch","true_catch"),("Blocking","true_blocking"),("Speed","true_speed"),
+           ("Football IQ","true_football_iq"),("Strength","true_strength"),("Durability","true_durability")],
+    "OL": [("Strength","true_strength"),("Blocking","true_blocking"),("Football IQ","true_football_iq"),
+           ("Speed","true_speed"),("Durability","true_durability")],
+    "DL": [("Pass Rush","true_pass_rush"),("Strength","true_strength"),("Speed","true_speed"),
+           ("Tackling","true_tackling"),("Football IQ","true_football_iq")],
+    "LB": [("Tackling","true_tackling"),("Coverage Man","true_coverage_man"),
+           ("Pass Rush","true_pass_rush"),("Speed","true_speed"),("Football IQ","true_football_iq")],
+    "CB": [("Coverage Man","true_coverage_man"),("Coverage Zone","true_coverage_zone"),
+           ("Speed","true_speed"),("Football IQ","true_football_iq"),("Tackling","true_tackling")],
+    "S":  [("Coverage Zone","true_coverage_zone"),("Coverage Man","true_coverage_man"),
+           ("Tackling","true_tackling"),("Speed","true_speed"),("Football IQ","true_football_iq")],
+    "K":  [("Kick Accuracy","true_kick_accuracy"),("Kick Power","true_kick_power")],
+    "P":  [("Kick Power","true_kick_power"),("Kick Accuracy","true_kick_accuracy")],
+}
+
+PLAYER_ACTION_TOOLTIP_TRADE_BLOCK  = "Action wiring pending — Milestone 5.8"
+PLAYER_ACTION_TOOLTIP_RESTRUCTURE  = "Action wiring pending — Milestone 5.7"
+PLAYER_ACTION_TOOLTIP_CUT_PLAYER   = "Action wiring pending — Milestone 5.7"
+
+SATISFACTION_TIER_LABELS = {
+    "healthy":          "HEALTHY",
+    "distracted":       "DISTRACTED",
+    "agent_calls":      "AGENT CALLS",
+    "declined_meeting": "DECLINED MEETING",
+    "trade_request":    "TRADE REQUEST",
+    "holdout":          "HOLDOUT",
+}
+
+ROSTER_AGE_OPTIONS = ["All", "Under 25", "25-29", "30+"]
+
+# ---------------------------------------------------------------------------
+# PHASE 6 PROMPT 4 — LEAGUE SECTION (Standings + Leaders + Transactions)
+# ---------------------------------------------------------------------------
+
+STANDINGS_VIEWS = ["division", "conference", "league", "playoff_picture"]
+STANDINGS_PLAYOFF_PICTURE_MIN_WEEK = 10  # playoff picture only shown from week 10+
+
+LEADERS_CATEGORIES = {
+    "passing": {
+        "stat_col": "pass_yards",
+        "label": "Passing",
+        "positions": ["QB"],
+        "qualifier_col": "pass_attempts",
+        "qualifier_per_game": LEADERBOARD_QUALIFIER_PASS_ATT_PER_GAME,
+    },
+    "rushing": {
+        "stat_col": "rush_yards",
+        "label": "Rushing",
+        "positions": ["RB", "QB", "WR"],
+        "qualifier_col": "carries",
+        "qualifier_per_game": LEADERBOARD_QUALIFIER_RUSH_CAR_PER_GAME,
+    },
+    "receiving": {
+        "stat_col": "rec_yards",
+        "label": "Receiving",
+        "positions": ["WR", "TE", "RB"],
+        "qualifier_col": None,
+        "qualifier_per_game": None,
+    },
+    "sacks": {
+        "stat_col": "sacks",
+        "label": "Sacks",
+        "positions": ["DL", "LB"],
+        "qualifier_col": None,
+        "qualifier_per_game": None,
+    },
+    "interceptions": {
+        "stat_col": "interceptions",
+        "label": "Interceptions",
+        "positions": ["CB", "S", "LB"],
+        "qualifier_col": None,
+        "qualifier_per_game": None,
+    },
+}
+LEADERS_DEFAULT_LIMIT = 25
+
+TRANSACTION_TYPE_LABELS = {
+    "signed":                "Signed",
+    "released":              "Released",
+    "traded":                "Traded",
+    "drafted":               "Drafted",
+    "franchise_tagged":      "Franchise Tagged",
+    "franchise_tag_removed": "Tag Removed",
+    "restructured":          "Restructured",
+    "practice_squad_signed": "PS Signed",
+    "waiver_claimed":        "Waiver Claim",
+}
+TRANSACTIONS_FEED_LIMIT = 200
+
+# ---------------------------------------------------------------------------
+# PHASE 6 PROMPT 5 — SCHEDULE + GAME PREVIEW + GAME RECAP + MUTATIONS
+# ---------------------------------------------------------------------------
+
+# Background-task polling (JS api.js mirrors these values; keep in sync)
+UI_TASK_POLL_INTERVAL_MS = 400      # JS polls get_task_status this often
+UI_TASK_POLL_TIMEOUT_MS = 120_000   # give up a poll loop after this long
+
+# Recap headline outcome classification (point margin)
+RECAP_BIG_MARGIN = 17               # margin >= this -> "big" win/loss
+RECAP_TIGHT_MARGIN = 7              # margin <= this -> "tight" win/loss
+RECAP_V1_TEMPLATE_COUNT = 10        # v1 narrative library size target (5.10 expands)
+
+# Schedule BYE rows have no game; synthetic negative ids keep list.js
+# data-row-id unique and let onRowClick no-op on bye/future rows.
+SCHEDULE_BYE_ROW_ID_BASE = -1000    # bye row id = BASE - week_number
+
+# Synthetic display dates: schema stores no calendar dates. Week 1 anchors to
+# the first Thursday of September of the season year; each later week is +7 days.
+SEASON_DATE_ANCHOR_MONTH = 9
+SEASON_DATE_ANCHOR_WEEKDAY = 3      # Mon=0 .. Thu=3 (datetime.weekday())
+SEASON_WEEK_SPACING_DAYS = 7
+
+# ---------------------------------------------------------------------------
+# PHASE 6 PROMPT 7a — FA MARKET BROWSER (F-41) + FA PLAYER CARD (F-42)
+# ---------------------------------------------------------------------------
+
+FA_ACTION_DISABLED_TOOLTIP   = "Action wiring pending — Milestone 5.7b"
+FA_MARKET_COLUMNS            = ["pos", "name_short", "age", "overall",
+                                 "asking_salary", "interest_label", "status_icons"]
+FA_MARKET_DEFAULT_SORT_KEY   = "overall"
+FA_PLAYER_TAB_OVERVIEW       = "overview"
+FA_PLAYER_TAB_STATS          = "stats"
+FA_PLAYER_TAB_CAREER         = "career"
+FA_PLAYER_TAB_MARKET         = "market_interest"
+FA_PLAYER_TAB_CONTRACT_HIST  = "contract_history"
+
+FA_INTEREST_TIER_LABELS = {0: "Unknown", 1: "High", 2: "Neutral", 3: "Low"}
+
+# Rough salary fraction of league cap by position (for estimated asking salary display only)
+FA_POSITION_SALARY_FRACTION = {
+    'QB': 0.165, 'WR': 0.075, 'CB': 0.065, 'OL': 0.055,
+    'DL': 0.055, 'LB': 0.050, 'TE': 0.050, 'S': 0.045,
+    'RB': 0.038, 'K': 0.018, 'P': 0.018,
+}
+
+# ---------------------------------------------------------------------------
+# PHASE 6 PROMPT 7b — MODAL FRAMEWORK + FA MUTATIONS
+# ---------------------------------------------------------------------------
+
+# Modal stack z-index tiers. JS modal.js mirrors these (pywebview JS cannot
+# import Python; keep in sync). Must stay below .toast-container (z-index 2000
+# in components.css). Each nested modal adds STACK_STEP to the base.
+UI_ZINDEX_MODAL_BASE = 1000
+UI_ZINDEX_MODAL_STACK_STEP = 10
+UI_MODAL_FADE_MS = 150              # fade in/out duration (docs/ui Step 4 §10)
+
+# Watchlist: minimal per-player flag added in P7b (no separate table).
+PLAYER_WATCHLIST_COLUMN = "is_watchlisted"
+
+# Action-button tooltips for buttons WIRED in 5.7b (replace the disabled
+# "Action wiring pending" strings). Trade Block stays disabled until 5.8 —
+# PLAYER_ACTION_TOOLTIP_TRADE_BLOCK is unchanged.
+PLAYER_ACTION_TOOLTIP_CUT_ENABLED = "Release this player and absorb the dead cap"
+PLAYER_ACTION_TOOLTIP_RESTRUCTURE_ENABLED = (
+    "Convert base salary to signing bonus for current-year cap relief"
+)
+FA_ACTION_TOOLTIP_PITCH_ENABLED = "Open a pitch meeting and build a contract offer"
+FA_ACTION_TOOLTIP_WATCHLIST = "Track / untrack this player on your watchlist"
+
+# FA negotiation: resolve_offer() responses other than 'accepted' all surface
+# as a rejection this prompt (counter-offer flow is a later prompt).
+FA_OUTCOME_ACCEPTED = "accepted"
+FA_NONSIGNED_RESPONSES = ("countered", "shopped", "walked")
+
+# Display-only offer-range estimate around the presenter's fair-AAV estimate.
+# The authoritative valuation happens server-side in resolve_offer(); these
+# only prefill / bracket the Offer Builder form.
+FA_OFFER_RANGE_LOW_MULT = 0.85
+FA_OFFER_RANGE_PREMIUM_MULT = 1.20
+FA_OFFER_DEFAULT_YEARS = 3
+FA_OFFER_DEFAULT_SIGNING_BONUS_PCT = 0.15   # of total value
+FA_OFFER_DEFAULT_GUARANTEED_PCT = 0.50      # of total value
+
+# Mutation result / confirmation message templates.
+MSG_MUTATION_BUSY = "Another action is in progress. Please wait."
+MSG_PLAYER_NOT_FA = "{player_name} is not a free agent and cannot be signed."
+MSG_PLAYER_NOT_ON_TEAM = "That player is not on your team."
+MSG_SIGN_SUCCESS = "{player_name} signed. Year-1 cap impact: {cap_impact}."
+MSG_SIGN_REJECTED = "Rejected: {reason}"
+MSG_CUT_CONFIRM = "Release {player_name}? This creates {dead_cap} in dead cap."
+MSG_CUT_SUCCESS = "{player_name} released ({dead_cap} dead cap). New cap space: {new_cap}."
+MSG_RESTRUCTURE_SUCCESS = (
+    "{player_name} restructured — {years} year(s) adjusted. "
+    "New cap space: {new_cap}."
+)

@@ -1,0 +1,496 @@
+/* Component library — Football Simulator GUI
+ * 10 components from docs/ui/04_component_vocabulary.md §5.
+ * Build once, use everywhere. All values via tokens.css variables.
+ */
+
+/* ═══════════════════════════════════════════════════════════════
+   1. BUTTON
+   Variants: .btn-primary  .btn-secondary  .btn-ghost  .btn-destructive  .btn-icon
+   ═══════════════════════════════════════════════════════════════ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-body);
+  font-weight: 500;
+  line-height: 1;
+  transition: background 120ms ease, opacity 120ms ease;
+  white-space: nowrap;
+  position: relative;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--color-success);
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) { background: #1d8f5e; }
+
+.btn-secondary {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover:not(:disabled) { background: var(--bg-hover); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+.btn-ghost:hover:not(:disabled) { color: var(--text-primary); background: var(--bg-hover); }
+
+.btn-destructive {
+  background: var(--color-danger);
+  color: #fff;
+}
+.btn-destructive:hover:not(:disabled) { background: #b82d17; }
+
+.btn-icon {
+  padding: var(--space-2);
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius-md);
+}
+.btn-icon:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
+
+/* Tooltip on disabled buttons (shown via title attribute; enhanced below) */
+.btn[title] { cursor: default; }
+.btn:not(:disabled)[title] { cursor: pointer; }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   2. BADGE
+   Variants: .badge-grade  .badge-phase  .badge-status
+   ═══════════════════════════════════════════════════════════════ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* Grade badge: fixed size pill, monospace, color set via inline style or class */
+.badge-grade {
+  width: 32px;
+  height: 22px;
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  color: #fff;
+  background: var(--grade-good);
+}
+
+/* Per-grade background colors */
+.grade-ap  { background: var(--grade-elite);   color: #fff; }
+.grade-a   { background: var(--grade-elite-2); color: #fff; }
+.grade-am  { background: var(--grade-elite-3); color: #fff; }
+.grade-bp  { background: var(--grade-good);    color: #fff; }
+.grade-b   { background: var(--grade-good-2);  color: #fff; }
+.grade-bm  { background: var(--grade-good-3);  color: #fff; }
+.grade-cp  { background: var(--grade-avg);     color: #1a1a1a; }
+.grade-c   { background: var(--grade-avg-2);   color: #1a1a1a; }
+.grade-cm  { background: var(--grade-avg-3);   color: #1a1a1a; }
+.grade-dp  { background: var(--grade-poor);    color: #fff; }
+.grade-d   { background: var(--grade-poor-2);  color: #fff; }
+.grade-f   { background: var(--grade-fail);    color: #fff; }
+
+/* Phase badge: auto-width, colored */
+.badge-phase {
+  padding: 3px var(--space-2);
+  font-size: var(--text-micro);
+  font-family: var(--font-ui);
+  letter-spacing: 0.04em;
+}
+.phase-reg      { background: var(--color-success); color: #fff; }
+.phase-playoffs { background: var(--color-danger);  color: #fff; }
+.phase-pre      { background: var(--color-slate);   color: #fff; }
+.phase-off      { background: var(--color-slate);   color: #fff; }
+.phase-scouting { background: var(--color-info);    color: #fff; }
+.phase-fa       { background: var(--color-purple);  color: #fff; }
+.phase-draft    { background: var(--color-gold);    color: #1a1a1a; }
+
+/* Status badge */
+.badge-status {
+  padding: 2px var(--space-2);
+  font-size: var(--text-micro);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   3. CARD
+   ═══════════════════════════════════════════════════════════════ */
+
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.card-title {
+  font-size: var(--text-h3);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-3);
+}
+
+.card-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: var(--space-3) 0;
+}
+
+.card.clickable {
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.card.clickable:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--elev-1);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   4. TABLE
+   ═══════════════════════════════════════════════════════════════ */
+
+.data-table {
+  width: 100%;
+  font-size: var(--text-body);
+}
+
+.data-table thead th {
+  font-size: var(--text-micro);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg-surface);
+  user-select: none;
+}
+
+.data-table thead th.sortable { cursor: pointer; }
+.data-table thead th.sortable:hover { color: var(--text-primary); }
+.data-table thead th .sort-icon { margin-left: var(--space-1); opacity: 0.5; }
+.data-table thead th.sorted .sort-icon { opacity: 1; color: var(--color-success); }
+
+.data-table tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background 80ms ease;
+}
+
+.data-table tbody tr:hover { background: var(--bg-hover); }
+
+.data-table tbody tr.clickable { cursor: pointer; }
+
+.data-table td {
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-primary);
+}
+
+/* Numeric columns: right-aligned, monospace, tabular numerics */
+.data-table td.num,
+.data-table th.num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table td.muted { color: var(--text-secondary); }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   5. TAB NAVIGATION
+   ═══════════════════════════════════════════════════════════════ */
+
+.tab-nav {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab-nav-item {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-body);
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 100ms ease, border-color 100ms ease;
+  user-select: none;
+}
+
+.tab-nav-item:hover { color: var(--text-primary); }
+
+.tab-nav-item.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--color-success);  /* overridden per team accent in JS */
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   6. MODAL
+   ═══════════════════════════════════════════════════════════════ */
+
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elev-2);
+  min-width: 480px;
+  max-width: 720px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-title {
+  font-size: var(--text-h2);
+  font-weight: 600;
+}
+
+.modal-body {
+  padding: var(--space-5);
+  overflow-y: auto;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--border);
+}
+
+/* ── Phase 6 P7b: stacked modal framework (modal.js) ───────────────── */
+
+/* JS sets per-level z-index inline; this overrides the legacy fixed
+   z-index:1000 so nested modals stack correctly. */
+.modal-scrim--stacked { z-index: auto; }
+
+.modal {
+  max-height: calc(100vh - 96px);
+  overflow: hidden;
+}
+.modal--lg { max-width: 960px; }
+
+.modal-body { max-height: calc(100vh - 220px); }
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 var(--space-2);
+}
+.modal-close:hover { color: var(--text-primary); }
+
+/* Subtle 150ms fade (mirrors UI_MODAL_FADE_MS). */
+.modal-scrim--stacked { transition: opacity 150ms ease; opacity: 1; }
+.modal-scrim--enter,
+.modal-scrim--leave { opacity: 0; }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   7. TOAST NOTIFICATION
+   ═══════════════════════════════════════════════════════════════ */
+
+.toast-container {
+  position: fixed;
+  bottom: var(--space-5);
+  right: var(--space-5);
+  display: flex;
+  flex-direction: column-reverse;
+  gap: var(--space-2);
+  z-index: 2000;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--elev-2);
+  font-size: var(--text-body);
+  color: var(--text-primary);
+  pointer-events: all;
+  animation: toast-in 200ms ease;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   8. FORM INPUTS
+   ═══════════════════════════════════════════════════════════════ */
+
+.input,
+.search-input,
+.select {
+  height: 36px;
+  padding: 0 var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--text-body);
+  outline: none;
+  transition: border-color 100ms ease;
+  width: 100%;
+}
+
+.input:focus,
+.search-input:focus,
+.select:focus {
+  border-color: var(--border-strong);
+}
+
+.search-input {
+  padding-left: var(--space-6); /* room for search icon */
+}
+
+.input-wrapper {
+  position: relative;
+}
+
+.input-icon {
+  position: absolute;
+  left: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.checkbox,
+.radio {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-success);
+  cursor: pointer;
+}
+
+.filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-small);
+  cursor: pointer;
+}
+.filter-pill:hover { border-color: var(--border-strong); }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   9. ALERT / BANNER
+   ═══════════════════════════════════════════════════════════════ */
+
+.alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border-left: 3px solid currentColor;
+  font-size: var(--text-body);
+}
+
+.alert-info    { background: rgba(29, 108, 199, 0.12); color: var(--color-info); }
+.alert-warning { background: rgba(212, 160, 23, 0.12); color: var(--color-warning); }
+.alert-danger  { background: rgba(212, 53, 28, 0.12);  color: var(--color-danger); }
+.alert-success { background: rgba(34, 160, 107, 0.12); color: var(--color-success); }
+
+.alert-body { flex: 1; color: var(--text-primary); }
+.alert-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--text-body);
+  line-height: 1;
+  padding: 0;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   10. TOOLTIP
+   Shown via [data-tooltip] attribute + CSS. Enhanced with JS if needed.
+   ═══════════════════════════════════════════════════════════════ */
+
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-small);
+  color: var(--text-primary);
+  white-space: nowrap;
+  max-width: 280px;
+  white-space: normal;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease 200ms;
+  z-index: 500;
+}
+
+[data-tooltip]:hover::after {
+  opacity: 1;
+}

@@ -1,0 +1,1032 @@
+/* ── Per-screen layout overrides (Milestone 5.2+) ── */
+
+/* ── Dashboard (T-01) — Pattern C Hub ── */
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+/* NEWS card spans full width */
+.dashboard-grid .card-news {
+  grid-column: 1 / -1;
+}
+
+/* Below 1100px collapse to single column */
+@media (max-width: 1100px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-grid .card-news {
+    grid-column: 1;
+  }
+}
+
+/* ── Card base (supplement components.css) ── */
+
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.card__header {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-small);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card__body {
+  padding: var(--space-3) var(--space-4);
+}
+
+.card__empty {
+  color: var(--text-muted);
+  font-size: var(--text-small);
+  padding: var(--space-3) 0;
+}
+
+/* ── Next Game card ── */
+
+.ng-matchup {
+  font-size: var(--text-h3);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-1);
+}
+
+.ng-opp-name { color: var(--text-primary); }
+
+.ng-record {
+  font-size: var(--text-body);
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.ng-meta {
+  font-size: var(--text-small);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-1);
+}
+
+.ng-weather {
+  font-size: var(--text-small);
+  color: var(--text-muted);
+}
+
+/* ── Team Status card ── */
+
+.ts-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-body);
+}
+.ts-row:last-of-type { border-bottom: none; }
+
+.ts-label {
+  color: var(--text-muted);
+  font-size: var(--text-small);
+  flex-shrink: 0;
+}
+
+.ts-value {
+  color: var(--text-primary);
+  text-align: right;
+}
+
+.ts-cap {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-success);
+}
+
+/* ── News card ── */
+
+.news-item {
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-body);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.news-item:last-child { border-bottom: none; }
+
+.news-bullet { color: var(--text-muted); margin-right: var(--space-1); }
+
+.news-award       { color: var(--color-gold); }
+.news-warning     { color: var(--color-warning); }
+.news-transaction { color: var(--text-secondary); }
+.news-info        { color: var(--text-muted); }
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--color-success);
+  font-size: var(--text-small);
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+.btn-link:disabled { color: var(--text-muted); cursor: default; text-decoration: none; }
+
+/* ── Alerts card ── */
+
+.alert-item {
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-body);
+}
+.alert-item:last-child { border-bottom: none; }
+
+.alert-warning  { color: var(--color-warning); }
+.alert-critical { color: var(--color-danger); }
+.alert-info     { color: var(--text-secondary); }
+
+/* ── Top Performers card ── */
+
+.perf-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-body);
+}
+.perf-row:last-child { border-bottom: none; }
+
+.perf-name  { font-weight: 600; color: var(--text-primary); }
+.perf-team  { color: var(--text-muted); font-size: var(--text-small); }
+.perf-blurb { color: var(--text-secondary); flex: 1; text-align: right; font-size: var(--text-small); }
+
+/* ── Loading spinner ── */
+
+.loading-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--text-muted);
+  font-size: var(--text-body);
+}
+
+/* ── Sub-nav rail — Team section ── */
+
+.sub-nav-item {
+  display: block;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-body);
+  color: var(--text-secondary);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  user-select: none;
+  transition: color 100ms ease, border-color 100ms ease;
+}
+.sub-nav-item:hover { color: var(--text-primary); }
+.sub-nav-item.active {
+  color: var(--text-primary);
+  border-left-color: var(--color-success);
+  background: var(--bg-hover);
+}
+.sub-nav-item.disabled {
+  color: var(--text-muted);
+  cursor: default;
+  pointer-events: none;
+}
+
+/* Phase-progress states (FO Hub offseason mode) */
+.sub-nav-item.completed {
+  color: var(--text-muted);
+}
+.sub-nav-item.completed::before { content: '✓  '; font-size: var(--text-small); }
+.sub-nav-item.upcoming {
+  color: var(--text-muted);
+  cursor: default;
+  pointer-events: none;
+  opacity: 0.55;
+}
+.sub-nav-item.upcoming::before { content: '○  '; font-size: var(--text-small); }
+
+.sub-nav-sep {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: var(--space-2) var(--space-3);
+}
+
+/* ── Roster (T-02) ── */
+
+.roster-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.filter-title {
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-right: var(--space-2);
+}
+
+.filter-select {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--text-small);
+  padding: 2px var(--space-2);
+  cursor: pointer;
+}
+
+.filter-search {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-small);
+  padding: 2px var(--space-2);
+  min-width: 140px;
+}
+
+.filter-count {
+  margin-left: auto;
+  font-size: var(--text-small);
+  color: var(--text-muted);
+}
+
+.roster-table-wrap {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-body);
+}
+
+.data-table thead tr {
+  background: var(--bg-surface);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.data-table th {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  font-size: var(--text-small);
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.data-table th.th-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.data-table th.th-sortable:hover {
+  color: var(--text-primary);
+}
+
+.data-table td {
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.data-table tbody .data-row {
+  cursor: pointer;
+  transition: background 80ms ease;
+}
+
+.data-table tbody .data-row:hover {
+  background: var(--bg-hover);
+}
+
+/* Context menu */
+
+.context-menu {
+  position: fixed;
+  z-index: 1000;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  min-width: 160px;
+  overflow: hidden;
+}
+
+.context-menu-item {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-body);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.context-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.context-menu-item.disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+/* ── Player Card (T-05) ── */
+
+.detail-screen {
+  height: 100%;
+  overflow: hidden;
+}
+
+.player-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.player-photo-placeholder {
+  font-size: 48px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.player-identity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.player-name {
+  font-size: var(--text-h2);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.player-meta {
+  font-size: var(--text-small);
+  color: var(--text-secondary);
+}
+
+.player-grades {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+  font-size: var(--text-small);
+  color: var(--text-muted);
+}
+
+.grade-badge {
+  display: inline-block;
+  font-weight: 700;
+  font-size: var(--text-body);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+}
+
+/* Grade badge color classes */
+.grade-ap { background: #1a6b2e; color: #7fffaa; }
+.grade-a  { background: #1a6b2e; color: #aaffcc; }
+.grade-am { background: #1a5c2e; color: #aaffcc; }
+.grade-bp { background: #1a4a6b; color: #aaddff; }
+.grade-b  { background: #1a4a6b; color: #c0ddff; }
+.grade-bm { background: #1a3a6b; color: #c0ddff; }
+.grade-cp { background: #5c5c00; color: #ffff88; }
+.grade-c  { background: #4a4a00; color: #ffff88; }
+.grade-cm { background: #3a3a00; color: #ffee66; }
+.grade-dp { background: #6b2200; color: #ffaa88; }
+.grade-d  { background: #5c1a00; color: #ff9966; }
+.grade-f  { background: #4a0000; color: #ff6666; }
+
+.tab-nav {
+  flex-shrink: 0;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--text-body);
+  padding: var(--space-2) var(--space-4);
+  transition: color 100ms ease, border-color 100ms ease;
+}
+
+.tab-btn:hover {
+  color: var(--text-primary);
+}
+
+.tab-btn--active {
+  color: var(--text-primary);
+  border-bottom-color: var(--color-success);
+}
+
+.player-body {
+  flex: 1;
+  overflow: hidden;
+}
+
+.player-tab-content {
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-4);
+}
+
+/* ── Detail screen back navigation (Bug 2 fix) ── */
+.detail-back-bar {
+  padding: var(--space-2) var(--space-4);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.btn-back {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--text-small);
+  padding: 0;
+  transition: color 100ms ease;
+}
+
+.btn-back:hover {
+  color: var(--text-primary);
+}
+
+/* ── Generic list-screen base ── */
+.list-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Group header rows (Standings dividers, Transaction week headers) ── */
+.group-header-row td {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: var(--text-small);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--border-strong);
+}
+
+/* ── View toggle (Standings) ── */
+.view-toggle {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.view-toggle-btn {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--text-small);
+}
+
+.view-toggle-btn.active {
+  background: var(--color-info);
+  color: #fff;
+  border-color: var(--color-info);
+}
+
+/* ── Category switcher (Leaders) ── */
+.category-switcher {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.cat-btn {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--text-small);
+}
+
+.cat-btn.active {
+  background: var(--color-info);
+  color: #fff;
+  border-color: var(--color-info);
+}
+
+/* ── Screens that wrap initListScreen ── */
+.standings-screen,
+.leaders-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.standings-inner,
+.leaders-inner,
+.transactions-screen {
+  flex: 1;
+  overflow: hidden;
+}
+
+.placeholder-card {
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.player-tab-content.hidden {
+  display: none;
+}
+
+.player-action-row {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+/* Attribute grid for key attributes */
+.attr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-2) var(--space-4);
+}
+
+.attr-label {
+  font-size: var(--text-small);
+  color: var(--text-muted);
+}
+
+.attr-grade {
+  margin-top: 2px;
+}
+
+/* Contract year rows */
+.contract-year-row {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+  font-size: var(--text-small);
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.contract-year-row:last-child {
+  border-bottom: none;
+}
+
+/* Satisfaction event rows */
+.sat-event-row {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  font-size: var(--text-small);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.sat-event-row:last-child {
+  border-bottom: none;
+}
+
+.sat-delta {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 32px;
+}
+
+.sat-delta.positive { color: var(--color-success); }
+.sat-delta.negative { color: var(--color-danger); }
+
+/* Season history rows */
+.stat-season-row {
+  padding: var(--space-2) 0;
+  font-size: var(--text-small);
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  line-height: 1.4;
+}
+
+.stat-season-row:last-child {
+  border-bottom: none;
+}
+
+/* ===================================================================== */
+/* Phase 6 P5 — Schedule / Game Preview / Game Recap (structural; full   */
+/* Pattern D polish is Milestone 5.10 — no motion here)                  */
+/* ===================================================================== */
+
+/* Generic list.js row variants (used by Schedule) */
+.data-row.row-variant-current {
+  background: rgba(29, 108, 199, 0.14);
+  font-weight: 700;
+}
+.data-row.row-variant-current td:first-child {
+  box-shadow: inset 3px 0 0 var(--color-info);
+}
+.data-row.row-variant-muted td {
+  color: var(--text-muted);
+}
+.data-row.row-variant-bye td {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.schedule-screen .schedule-head {
+  padding: var(--space-3) var(--space-4) var(--space-1);
+}
+.schedule-screen .schedule-head h2 {
+  font-size: var(--text-h2);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.schedule-screen .schedule-head .schedule-sub {
+  font-size: var(--text-small);
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* Game Preview — reuses .dashboard-grid card frame */
+#screen-game-preview .preview-sim-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+.preview-health-row {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-small);
+}
+.preview-health-row:last-child { border-bottom: none; }
+.preview-health-empty {
+  color: var(--text-muted);
+  font-size: var(--text-small);
+  padding: var(--space-2) 0;
+}
+
+/* Game Recap — structural layout */
+.recap-screen { padding: var(--space-5) var(--space-4); }
+.recap-hero {
+  text-align: center;
+  padding: var(--space-5) 0 var(--space-3);
+}
+.recap-hero .recap-score {
+  font-size: var(--text-display);
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  letter-spacing: 1px;
+}
+.recap-hero .recap-score .recap-win { color: var(--color-success); }
+.recap-hero .recap-setting {
+  font-size: var(--text-small);
+  color: var(--text-secondary);
+  margin-top: var(--space-2);
+}
+.recap-headline {
+  text-align: center;
+  font-size: var(--text-h2);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: var(--space-3) auto var(--space-5);
+  max-width: 760px;
+  line-height: 1.5;
+}
+.recap-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+  max-width: 980px;
+  margin: 0 auto;
+}
+.recap-grid .recap-keyplays { grid-column: 1 / -1; }
+.recap-box .card__body { font-family: var(--font-mono); }
+.recap-kp-row {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  font-size: var(--text-small);
+  border-bottom: 1px solid var(--border);
+  line-height: 1.5;
+}
+.recap-kp-row:last-child { border-bottom: none; }
+.recap-kp-when {
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  min-width: 64px;
+}
+.recap-perf-row,
+.recap-inj-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+  font-size: var(--text-small);
+  border-bottom: 1px solid var(--border);
+}
+.recap-perf-row:last-child,
+.recap-inj-row:last-child { border-bottom: none; }
+.recap-empty { color: var(--text-muted); font-size: var(--text-small); }
+.recap-actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-3);
+  margin: var(--space-5) auto 0;
+}
+
+/* Mutation progress (minimal, no motion) */
+.job-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-small);
+  color: var(--text-secondary);
+}
+.job-progress .job-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  max-width: 240px;
+}
+.job-progress .job-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--color-info);
+}
+.job-error {
+  color: var(--color-danger);
+  font-size: var(--text-small);
+  padding: var(--space-2) var(--space-4);
+}
+
+/* ── F-01 Front Office Hub ── */
+
+.fo-hub-screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+
+.fo-hub-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.fo-hub-title {
+  margin: 0;
+  font-size: var(--text-title);
+}
+
+.fo-mode-badge {
+  background: var(--color-info);
+  color: #fff;
+  font-size: var(--text-small);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.fo-deadline {
+  font-size: var(--text-small);
+  color: var(--text-muted);
+}
+
+.fo-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+
+.fo-card {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4);
+  gap: var(--space-3);
+}
+
+.fo-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.fo-card-header .card-title {
+  margin: 0;
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+
+.fo-card-body {
+  flex: 1;
+}
+
+.fo-card-footer {
+  padding-top: var(--space-2);
+}
+
+.fo-stat-line {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-1) 0;
+  font-size: var(--text-body);
+}
+
+.fo-stat-label { color: var(--text-muted); }
+.fo-stat-value { font-weight: 600; }
+
+/* Placeholder destination for unbuilt FO sub-screens */
+.fo-placeholder-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: var(--space-3);
+  color: var(--text-muted);
+}
+
+/* ── F-41 FA Market Browser ── */
+.fa-market-screen { /* inherits from .list-screen base */ }
+
+/* ── F-42 FA Player Card ── */
+.salary-estimate {
+  font-size: var(--text-title);
+  font-weight: 700;
+  color: var(--color-accent);
+}
+.salary-note {
+  font-size: var(--text-small);
+  color: var(--text-muted);
+  margin: var(--space-1) 0 0;
+}
+.interest-tier {
+  font-weight: 600;
+  padding: var(--space-1) 0;
+  margin-bottom: var(--space-2);
+}
+.interest-signal {
+  font-style: italic;
+  color: var(--text-secondary);
+}
+.tier-1 { color: var(--color-success); }
+.tier-2 { color: var(--color-info, var(--text-secondary)); }
+.tier-3 { color: var(--color-danger); }
+.tier-0 { color: var(--text-muted); }
+.team-line {
+  padding: var(--space-1) 0;
+  color: var(--text-secondary);
+}
+.contract-hist-row {
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle, var(--border));
+  font-size: var(--text-body);
+}
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-4);
+  overflow-y: auto;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Phase 6 P7b — Modal content (Pitch / Offer / Result / Cut / Restructure)
+   ═══════════════════════════════════════════════════════════════ */
+
+.mdl-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+.mdl-row:last-of-type { border-bottom: none; }
+.mdl-label { color: var(--text-muted); }
+.mdl-value { font-variant-numeric: tabular-nums; }
+
+.mdl-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3) var(--space-4);
+}
+.mdl-field { display: flex; flex-direction: column; gap: var(--space-1); }
+.mdl-field label { font-size: var(--text-small); color: var(--text-muted); }
+.mdl-field input {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  padding: var(--space-2) var(--space-3);
+  font-variant-numeric: tabular-nums;
+}
+.mdl-field input:focus {
+  outline: 2px solid var(--border-strong);
+  outline-offset: -1px;
+}
+
+.mdl-note {
+  margin-top: var(--space-3);
+  font-size: var(--text-small);
+  color: var(--text-muted);
+}
+.mdl-error {
+  margin-top: var(--space-3);
+  color: var(--color-danger);
+  font-size: var(--text-small);
+}
+
+.mdl-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.mdl-schedule {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--space-3);
+}
+.mdl-schedule th,
+.mdl-schedule td {
+  text-align: right;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.mdl-schedule th:first-child,
+.mdl-schedule td:first-child { text-align: left; }
+
+.mdl-banner {
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-3);
+  font-weight: 600;
+}
+.mdl-banner--accepted {
+  background: rgba(34, 160, 107, 0.15);
+  color: var(--color-success);
+}
+.mdl-banner--rejected {
+  background: rgba(212, 53, 28, 0.15);
+  color: var(--color-danger);
+}

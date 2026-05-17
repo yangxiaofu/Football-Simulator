@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS season (
     championship_away_score INTEGER,
     championship_mvp_player_id INTEGER,
     championship_coach_id INTEGER,
+    recap_shown             INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (champion_team_id) REFERENCES team(id),
     FOREIGN KEY (runner_up_team_id) REFERENCES team(id),
     FOREIGN KEY (championship_mvp_player_id) REFERENCES player(id),
@@ -134,6 +135,7 @@ CREATE TABLE IF NOT EXISTS player (
     roster_status       TEXT NOT NULL DEFAULT 'active', -- 'active'|'ir'|'pup'|'practice_squad'|'free_agent'|'retired'
     injury_status       TEXT,                           -- NULL | 'questionable' | 'doubtful' | 'out'
     injury_weeks_remaining INTEGER DEFAULT 0,
+    is_watchlisted      INTEGER NOT NULL DEFAULT 0,      -- GUI FA watchlist flag (Phase 6 P7b)
 
     FOREIGN KEY (team_id) REFERENCES team(id)
 );

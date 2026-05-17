@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Football Simulator</title>
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/reset.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/screens.css">
+  <style>
+    /* ── App shell layout ── */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Persistent context bar ── */
+    #context-bar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+      height: 56px;
+      padding: 0 var(--space-5);
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      user-select: none;
+    }
+
+    /* Identity zone */
+    #ctx-identity {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    #ctx-logo-placeholder {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-md);
+      background: var(--bg-elevated);
+      border: 2px solid var(--border-strong);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    #ctx-team-name {
+      font-weight: 600;
+      font-size: var(--text-body);
+      color: var(--text-primary);
+    }
+    #ctx-team-abbr {
+      font-size: var(--text-small);
+      color: var(--text-muted);
+    }
+
+    /* Separator */
+    .ctx-sep {
+      width: 1px;
+      height: 24px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+
+    /* State zone */
+    #ctx-state {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      flex: 1;
+    }
+    #ctx-week-label {
+      font-size: var(--text-body);
+      color: var(--text-secondary);
+    }
+    #ctx-record {
+      font-size: var(--text-body);
+      color: var(--text-secondary);
+    }
+
+    /* Cap zone */
+    #ctx-cap {
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+    }
+    #ctx-cap-space {
+      font-size: var(--text-body);
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      color: var(--text-primary);
+    }
+    #ctx-cap:hover #ctx-cap-space { color: var(--color-success); }
+
+    /* Action zone */
+    #ctx-actions {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      flex-shrink: 0;
+    }
+    #ctx-saved {
+      font-size: var(--text-small);
+      color: var(--text-muted);
+    }
+
+    /* ── Section tab nav ── */
+    #section-nav {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      height: 40px;
+      padding: 0 var(--space-5);
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      gap: 0;
+    }
+
+    .section-tab {
+      display: flex;
+      align-items: center;
+      height: 40px;
+      padding: 0 var(--space-4);
+      font-size: var(--text-body);
+      font-weight: 500;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: color 100ms ease, border-color 100ms ease;
+      text-decoration: none;
+      user-select: none;
+    }
+    .section-tab:hover { color: var(--text-primary); }
+    .section-tab.active {
+      color: var(--text-primary);
+      border-bottom-color: var(--color-success);
+    }
+
+    /* ── Main area: sub-nav rail + content ── */
+    #main-area {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Sub-nav rail (Prompt 2+ will populate per section) */
+    #sub-nav {
+      width: 180px;
+      flex-shrink: 0;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: var(--space-4) 0;
+    }
+
+    /* Content area */
+    #content {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--space-5);
+      background: var(--bg-base);
+    }
+
+    /* Placeholder screen (Milestone 5.1) */
+    .placeholder-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: var(--space-3);
+      color: var(--text-muted);
+    }
+    .placeholder-name {
+      font-size: var(--text-h1);
+      font-weight: 700;
+      color: var(--text-secondary);
+    }
+    .placeholder-milestone {
+      font-size: var(--text-body);
+      font-family: var(--font-mono);
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+
+    <!-- ── Persistent context bar ── -->
+    <header id="context-bar">
+
+      <!-- Identity zone -->
+      <div id="ctx-identity" onclick="location.hash='#/team/dashboard'" title="Team Dashboard">
+        <div id="ctx-logo-placeholder">🏈</div>
+        <span id="ctx-team-name">Loading…</span>
+        <span id="ctx-team-abbr"></span>
+      </div>
+
+      <div class="ctx-sep"></div>
+
+      <!-- State zone -->
+      <div id="ctx-state">
+        <span id="ctx-week-label"></span>
+        <span id="ctx-phase-badge" class="badge badge-phase phase-reg">REG</span>
+        <span id="ctx-record"></span>
+      </div>
+
+      <!-- Cap zone -->
+      <div id="ctx-cap" title="Open Salary Cap Overview">
+        <span id="ctx-cap-space">—</span>
+      </div>
+
+      <div class="ctx-sep"></div>
+
+      <!-- Action zone -->
+      <div id="ctx-actions">
+        <span id="ctx-saved" title="Autosave status">✓ Saved</span>
+        <button class="btn-icon" title="Notifications" disabled>🔔</button>
+        <button
+          id="btn-continue"
+          class="btn btn-primary"
+          disabled
+          data-tooltip="Action wiring pending — Milestone 5.5"
+          title="Action wiring pending — Milestone 5.5"
+        >Continue ▶</button>
+        <button class="btn-icon" title="Settings" disabled>⚙</button>
+      </div>
+
+    </header>
+
+    <!-- ── Section tab nav ── -->
+    <nav id="section-nav">
+      <a id="tab-team"        class="section-tab active" href="#/team/dashboard">Team</a>
+      <a id="tab-league"      class="section-tab"        href="#/league/standings">League</a>
+      <a id="tab-schedule"    class="section-tab"        href="#/schedule">Schedule</a>
+      <a id="tab-frontoffice" class="section-tab"        href="#/front-office">Front Office</a>
+      <a id="tab-dynasty"     class="section-tab"        href="#/dynasty">Dynasty</a>
+    </nav>
+
+    <!-- ── Main area ── -->
+    <div id="main-area">
+
+      <!-- Sub-nav rail (populated per section in Prompt 2+) -->
+      <aside id="sub-nav"></aside>
+
+      <!-- Content area — router swaps content here -->
+      <main id="content">
+        <div class="placeholder-screen">
+          <span class="placeholder-name">Loading…</span>
+        </div>
+      </main>
+
+    </div>
+
+  </div><!-- #app -->
+
+  <!-- Modal stack mount point (modal.js injects scrims/dialogs here) -->
+  <div id="modal-root"></div>
+
+  <!-- Vendor: Alpine.js v3 (vendored, no CDN) -->
+  <script src="js/alpine.min.js" defer></script>
+
+  <!-- App JS (ES modules) -->
+  <script type="module" src="js/shell.js"></script>
+</body>
+</html>

@@ -28,7 +28,7 @@ def get_connection(save_path: str) -> sqlite3.Connection:
         with get_connection("saves/my_franchise.db") as conn:
             # auto-closes on exit
     """
-    conn = sqlite3.connect(save_path)
+    conn = sqlite3.connect(save_path, check_same_thread=False)
     conn.execute("PRAGMA foreign_keys = ON")
     conn.row_factory = sqlite3.Row  # Allows dict-style column access
 
@@ -49,6 +49,7 @@ def get_connection(save_path: str) -> sqlite3.Connection:
     ensure_narrative_moment_table(conn)
     ensure_in_season_stats_tables(conn)
     ensure_depth_chart_table(conn)
+    ensure_player_watchlist_column(conn)
 
     return conn
 
@@ -666,6 +667,19 @@ def ensure_team_phase_column(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def ensure_player_watchlist_column(conn: sqlite3.Connection) -> None:
+    """Add is_watchlisted column to player for the GUI FA watchlist (Phase 6 P7b).
+
+    Safe to call multiple times. Forward-migrates saves created before the
+    watchlist flag existed.
+
+    Args:
+        conn: Database connection
+    """
+    _safe_add_column(conn, 'player', 'is_watchlisted', "INTEGER NOT NULL DEFAULT 0")
+    conn.commit()
+
+
 def ensure_owner_sentiment_tables(conn: sqlite3.Connection) -> None:
     """
     Create owner_sentiment and coach_job_offer tables if they don't exist.
@@ -961,6 +975,15 @@ def ensure_press_tables(conn: sqlite3.Connection) -> None:
         pass  # Column already exists
 
     conn.commit()
+
+
+def ensure_recap_column(conn: sqlite3.Connection) -> None:
+    """Idempotently add recap_shown column to season table (Phase 5 P10)."""
+    try:
+        conn.execute("ALTER TABLE season ADD COLUMN recap_shown INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # Column already exists
 
 
 def ensure_tier2_press_tables(conn: sqlite3.Connection) -> None:

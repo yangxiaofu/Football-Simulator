@@ -332,6 +332,97 @@ def get_head_to_head_record(
     return {'wins': wins, 'losses': losses, 'ties': ties}
 
 
+def get_game(conn: sqlite3.Connection, game_id: int) -> Optional[sqlite3.Row]:
+    """Get a single game with week/season context and team name/abbr/city.
+
+    Used by the GUI Game Preview / Game Recap presenters (Phase 6 P5).
+    """
+    return conn.execute("""
+        SELECT g.id, g.home_team_id, g.away_team_id,
+               g.home_score, g.away_score, g.is_complete,
+               g.weather_condition, g.wind_speed, g.temperature,
+               ht.city || ' ' || ht.nickname AS home_name,
+               ht.abbreviation AS home_abbr,
+               ht.city AS home_city,
+               at.city || ' ' || at.nickname AS away_name,
+               at.abbreviation AS away_abbr,
+               at.city AS away_city,
+               w.week_number AS week_num,
+               w.week_type,
+               s.year AS season_year
+        FROM game g
+        JOIN week w ON g.week_id = w.id
+        JOIN season s ON w.season_id = s.id
+        JOIN team ht ON ht.id = g.home_team_id
+        JOIN team at ON at.id = g.away_team_id
+        WHERE g.id = ?
+    """, (game_id,)).fetchone()
+
+
+def get_team_season_schedule(
+    conn: sqlite3.Connection, team_id: int, season_year: int,
+) -> list[dict]:
+    """Return the full regular-season schedule for a team, BYE weeks included.
+
+    Iterates every regular week for the season; a week with no game row for
+    this team is emitted as a BYE (game_id=None). Used by the Schedule
+    presenter (Phase 6 P5).
+    """
+    rows = conn.execute("""
+        SELECT g.id AS game_id, g.home_team_id, g.away_team_id,
+               g.home_score, g.away_score, g.is_complete,
+               w.week_number AS week_num, w.week_type,
+               ht.abbreviation AS home_abbr,
+               ht.city || ' ' || ht.nickname AS home_name,
+               at.abbreviation AS away_abbr,
+               at.city || ' ' || at.nickname AS away_name
+        FROM game g
+        JOIN week w ON g.week_id = w.id
+        JOIN season s ON w.season_id = s.id
+        JOIN team ht ON ht.id = g.home_team_id
+        JOIN team at ON at.id = g.away_team_id
+        WHERE s.year = ?
+          AND w.week_type = 'regular'
+          AND (g.home_team_id = ? OR g.away_team_id = ?)
+    """, (season_year, team_id, team_id)).fetchall()
+
+    weeks = conn.execute("""
+        SELECT w.week_number FROM week w
+        JOIN season s ON w.season_id = s.id
+        WHERE s.year = ? AND w.week_type = 'regular'
+        ORDER BY w.week_number
+    """, (season_year,)).fetchall()
+
+    by_week = {r['week_num']: r for r in rows}
+    schedule: list[dict] = []
+    for wk in weeks:
+        wn = wk['week_number']
+        g = by_week.get(wn)
+        if g is None:
+            schedule.append({
+                'week_num': wn, 'game_id': None, 'is_bye': True,
+                'is_complete': 0, 'is_home': None,
+                'opp_abbr': None, 'opp_name': None,
+                'home_score': None, 'away_score': None,
+            })
+            continue
+        is_home = g['home_team_id'] == team_id
+        schedule.append({
+            'week_num': wn,
+            'game_id': g['game_id'],
+            'is_bye': False,
+            'is_complete': g['is_complete'],
+            'is_home': is_home,
+            'opp_abbr': g['away_abbr'] if is_home else g['home_abbr'],
+            'opp_name': g['away_name'] if is_home else g['home_name'],
+            'home_score': g['home_score'],
+            'away_score': g['away_score'],
+            'home_team_id': g['home_team_id'],
+            'away_team_id': g['away_team_id'],
+        })
+    return schedule
+
+
 def get_division_record(
     conn: sqlite3.Connection, team_id: int, season_year: int,
 ) -> dict:
@@ -805,14 +896,17 @@ def get_roster_with_contracts(
 ) -> list[sqlite3.Row]:
     """Get all active players on a team with contract info, sorted by position."""
     return conn.execute("""
-        SELECT p.*, c.total_years, c.total_value, c.signed_season,
-               cy.cap_hit
+        SELECT p.*, c.total_years, c.total_value, c.signed_season, c.aav,
+               cy.cap_hit,
+               CASE WHEN ft.id IS NOT NULL THEN 1 ELSE 0 END AS franchise_tagged
         FROM player p
         LEFT JOIN contract c ON c.player_id = p.id AND c.status = 'active'
         LEFT JOIN contract_year cy ON cy.contract_id = c.id AND cy.season_year = ?
-        WHERE p.team_id = ? AND p.is_active = 1
+        LEFT JOIN franchise_tag ft ON ft.player_id = p.id AND ft.season_year = ?
+                                   AND ft.status = 'active'
+        WHERE p.team_id = ? AND p.is_active = 1 AND p.roster_status = 'active'
         ORDER BY p.position, p.true_overall DESC
-    """, (season_year, team_id)).fetchall()
+    """, (season_year, season_year, team_id)).fetchall()
 
 
 # ======================
@@ -1207,6 +1301,24 @@ def update_player_team(
         "UPDATE player SET team_id = ?, roster_status = ? WHERE id = ?",
         (team_id, roster_status, player_id),
     )
+
+
+def set_player_watchlist(
+    conn: sqlite3.Connection, player_id: int, flag: bool,
+) -> None:
+    """Set the GUI FA watchlist flag on a player (Phase 6 P7b)."""
+    conn.execute(
+        "UPDATE player SET is_watchlisted = ? WHERE id = ?",
+        (1 if flag else 0, player_id),
+    )
+
+
+def count_watchlisted_players(conn: sqlite3.Connection) -> int:
+    """Count players flagged on the FA watchlist."""
+    row = conn.execute(
+        "SELECT COUNT(*) AS cnt FROM player WHERE is_watchlisted = 1",
+    ).fetchone()
+    return row["cnt"] if row else 0
 
 
 def get_team_active_roster_count(
@@ -2792,8 +2904,8 @@ def mark_offseason_phase_complete(
             f"Invalid phase '{phase}'. Must be one of {OFFSEASON_PHASE_SEQUENCE}"
         )
 
-    # season_ready has no completion column
-    if phase == 'season_ready':
+    # season_ready has no completion column; hall_of_fame_induction is a virtual phase
+    if phase in ('season_ready', 'hall_of_fame_induction'):
         return
 
     # Safe to use f-string after validation
@@ -2840,6 +2952,87 @@ def get_transaction_summary_for_offseason(
         WHERE team_id = ? AND season_year = ? AND week_number = 0
         ORDER BY id
     """, (team_id, season_year)).fetchall()
+
+
+# === Front Office Hub queries ===
+
+def get_fo_user_team(conn: sqlite3.Connection) -> Optional[sqlite3.Row]:
+    """Return the user's team row via league.user_team_id."""
+    row = conn.execute("SELECT user_team_id FROM league WHERE id = 1").fetchone()
+    if not row:
+        return None
+    return conn.execute("SELECT * FROM team WHERE id = ?", (row["user_team_id"],)).fetchone()
+
+
+def get_fo_owner_hot_seat(conn: sqlite3.Connection, team_id: int, season_year: int) -> str:
+    """Return owner hot_seat_tier for the user team (current season)."""
+    row = conn.execute(
+        "SELECT hot_seat_tier FROM owner_sentiment WHERE team_id = ? AND season_year = ?",
+        (team_id, season_year),
+    ).fetchone()
+    return row["hot_seat_tier"] if row else "stable"
+
+
+def get_fo_roster_counts(conn: sqlite3.Connection, team_id: int) -> dict:
+    """Return active and IR player counts for a team."""
+    rows = conn.execute("""
+        SELECT roster_status, COUNT(*) AS cnt FROM player
+        WHERE team_id = ? GROUP BY roster_status
+    """, (team_id,)).fetchall()
+    counts = {r["roster_status"]: r["cnt"] for r in rows}
+    return {
+        "active": counts.get("active", 0),
+        "ir": counts.get("ir", 0),
+    }
+
+
+def get_fo_active_offer_count(
+    conn: sqlite3.Connection, team_id: int, season_year: int
+) -> int:
+    """Count of pending FA offers made by the user's team."""
+    row = conn.execute("""
+        SELECT COUNT(*) FROM free_agent_offer
+        WHERE offering_team_id = ? AND season_year = ? AND status = 'pending'
+    """, (team_id, season_year)).fetchone()
+    return row[0] if row else 0
+
+
+def get_fo_recent_signings(
+    conn: sqlite3.Connection, team_id: int, season_year: int, limit: int = 5
+) -> list:
+    """Recent FA signings for the user's team from transaction_log."""
+    return conn.execute("""
+        SELECT tl.description, p.first_name, p.last_name, p.position
+        FROM transaction_log tl
+        LEFT JOIN player p ON tl.player_id = p.id
+        WHERE tl.team_id = ? AND tl.season_year = ? AND tl.week_number = 0
+          AND tl.transaction_type IN ('FA_SIGN', 'SIGN', 'SIGNED')
+        ORDER BY tl.id DESC LIMIT ?
+    """, (team_id, season_year, limit)).fetchall()
+
+
+def get_fo_league_signings(
+    conn: sqlite3.Connection, season_year: int, limit: int = 5
+) -> list:
+    """Recent FA signings league-wide from transaction_log."""
+    return conn.execute("""
+        SELECT tl.description, t.abbreviation AS team_abbr,
+               p.first_name, p.last_name, p.position
+        FROM transaction_log tl
+        LEFT JOIN player p ON tl.player_id = p.id
+        LEFT JOIN team t ON tl.team_id = t.id
+        WHERE tl.season_year = ? AND tl.week_number = 0
+          AND tl.transaction_type IN ('FA_SIGN', 'SIGN', 'SIGNED')
+        ORDER BY tl.id DESC LIMIT ?
+    """, (season_year, limit)).fetchall()
+
+
+def get_fo_draft_board_count(conn: sqlite3.Connection, team_id: int, season_year: int) -> int:
+    """Count of entries on the user team's draft board."""
+    row = conn.execute("""
+        SELECT COUNT(*) FROM draft_board WHERE team_id = ? AND season_year = ?
+    """, (team_id, season_year)).fetchone()
+    return row[0] if row else 0
 
 
 def get_legacy_score_delta(
@@ -3560,6 +3753,25 @@ def get_box_scores_for_game(conn: sqlite3.Connection, game_id: int) -> list[sqli
     """Get all box scores for a specific game."""
     return conn.execute("""
         SELECT * FROM box_score WHERE game_id = ?
+    """, (game_id,)).fetchall()
+
+
+def get_box_scores_with_names(
+    conn: sqlite3.Connection, game_id: int,
+) -> list[sqlite3.Row]:
+    """Box scores joined to player name/position for a game (Phase 6 P5)."""
+    return conn.execute("""
+        SELECT bs.*, p.first_name, p.last_name, p.position
+        FROM box_score bs
+        JOIN player p ON p.id = bs.player_id
+        WHERE bs.game_id = ?
+    """, (game_id,)).fetchall()
+
+
+def get_key_plays(conn: sqlite3.Connection, game_id: int) -> list[sqlite3.Row]:
+    """Get key plays for a game ordered by play number (Phase 6 P5)."""
+    return conn.execute("""
+        SELECT * FROM key_play WHERE game_id = ? ORDER BY play_number
     """, (game_id,)).fetchall()
 
 
@@ -4629,3 +4841,809 @@ def write_press_event_template_id(
             "UPDATE press_event SET template_id = ? WHERE id = ?",
             (template_id, press_event_id)
         )
+
+
+# ==============================================================================
+# Phase 5 P10 — Season Transition Flow
+# ==============================================================================
+
+def get_recap_shown(conn: sqlite3.Connection, season_year: int) -> int:
+    """Return recap_shown flag for this season (0 = not shown, 1 = shown)."""
+    row = conn.execute(
+        "SELECT recap_shown FROM season WHERE year = ?", (season_year,)
+    ).fetchone()
+    return row['recap_shown'] if row else 0
+
+
+def set_recap_shown(conn: sqlite3.Connection, season_year: int, value: int) -> None:
+    """Flip the recap_shown flag for this season."""
+    with conn:
+        conn.execute(
+            "UPDATE season SET recap_shown = ? WHERE year = ?", (value, season_year)
+        )
+
+
+def get_first_season_year(conn: sqlite3.Connection):
+    """Return the earliest season year in the database."""
+    row = conn.execute("SELECT MIN(year) as yr FROM season").fetchone()
+    return row['yr'] if row else None
+
+
+def get_team_playoff_finish(
+    conn: sqlite3.Connection, team_id: int, season_year: int
+) -> Optional[str]:
+    """Return 'Super Bowl Champion', 'Runner-Up', or None for teams that missed playoffs."""
+    row = conn.execute(
+        "SELECT champion_team_id, runner_up_team_id FROM season WHERE year = ?",
+        (season_year,)
+    ).fetchone()
+    if not row:
+        return None
+    if row['champion_team_id'] == team_id:
+        return 'Super Bowl Champion'
+    if row['runner_up_team_id'] == team_id:
+        return 'Runner-Up'
+    # Check if team appeared in any playoff game
+    pg = conn.execute("""
+        SELECT COUNT(*) as cnt FROM game g
+        JOIN week w ON g.week_id = w.id
+        JOIN season s ON w.season_id = s.id
+        WHERE (g.home_team_id = ? OR g.away_team_id = ?)
+          AND s.year = ? AND w.week_type != 'regular'
+    """, (team_id, team_id, season_year)).fetchone()
+    if pg and pg['cnt'] > 0:
+        return 'Playoff Exit'
+    return None
+
+
+def get_season_awards(conn: sqlite3.Connection, season_year: int) -> list:
+    """Return award list: MVP + All-Pro selections for the season."""
+    awards = []
+    mvp = conn.execute("""
+        SELECT p.first_name || ' ' || p.last_name AS player_name,
+               t.abbreviation AS team_abbr
+        FROM player_season_stats pss
+        JOIN player p ON pss.player_id = p.id
+        JOIN team t ON pss.team_id = t.id
+        WHERE pss.season_year = ? AND pss.won_mvp = 1
+        LIMIT 1
+    """, (season_year,)).fetchone()
+    if mvp:
+        awards.append({'award_type': 'MVP', 'player_name': mvp['player_name'],
+                       'team_abbr': mvp['team_abbr']})
+    all_pros = conn.execute("""
+        SELECT p.first_name || ' ' || p.last_name AS player_name,
+               t.abbreviation AS team_abbr
+        FROM player_season_stats pss
+        JOIN player p ON pss.player_id = p.id
+        JOIN team t ON pss.team_id = t.id
+        WHERE pss.season_year = ? AND pss.made_all_pro = 1
+        ORDER BY p.last_name
+        LIMIT 6
+    """, (season_year,)).fetchall()
+    for row in all_pros:
+        awards.append({'award_type': 'All-Pro', 'player_name': row['player_name'],
+                       'team_abbr': row['team_abbr']})
+    return awards
+
+
+def get_offseason_summary_for_team(
+    conn: sqlite3.Connection, team_id: int, season_year: int
+) -> dict:
+    """Return {signed, drafted, lost} name lists from transaction_log."""
+    signed = [r['description'] for r in conn.execute("""
+        SELECT description FROM transaction_log
+        WHERE team_id = ? AND season_year = ?
+          AND transaction_type IN ('FA_SIGNING', 'CONTRACT_EXTENSION')
+        ORDER BY id DESC LIMIT 5
+    """, (team_id, season_year)).fetchall()]
+    drafted = [r['description'] for r in conn.execute("""
+        SELECT description FROM transaction_log
+        WHERE team_id = ? AND season_year = ?
+          AND transaction_type = 'DRAFT_PICK'
+        ORDER BY id DESC LIMIT 5
+    """, (team_id, season_year)).fetchall()]
+    lost = [r['description'] for r in conn.execute("""
+        SELECT description FROM transaction_log
+        WHERE team_id = ? AND season_year = ?
+          AND transaction_type IN ('RELEASE', 'FA_DEPARTURE')
+        ORDER BY id DESC LIMIT 5
+    """, (team_id, season_year)).fetchall()]
+    return {'signed': signed[:3], 'drafted': drafted[:3], 'lost': lost[:3]}
+
+
+def get_team_schedule_strength(
+    conn: sqlite3.Connection, team_id: int, season_year: int
+) -> float:
+    """Compute schedule strength as average opponent win % for the season."""
+    rows = conn.execute("""
+        SELECT CASE WHEN g.home_team_id = ? THEN g.away_team_id ELSE g.home_team_id END AS opp_id
+        FROM game g
+        JOIN week w ON g.week_id = w.id
+        JOIN season s ON w.season_id = s.id
+        WHERE (g.home_team_id = ? OR g.away_team_id = ?)
+          AND s.year = ? AND w.week_type = 'regular'
+    """, (team_id, team_id, team_id, season_year)).fetchall()
+    if not rows:
+        return 0.5
+    total = 0.0
+    for r in rows:
+        rec = conn.execute("""
+            SELECT wins, losses FROM team_season_record
+            WHERE team_id = ? AND season_year = ?
+        """, (r['opp_id'], season_year)).fetchone()
+        if rec and (rec['wins'] + rec['losses']) > 0:
+            total += rec['wins'] / (rec['wins'] + rec['losses'])
+        else:
+            total += 0.5
+    return total / len(rows)
+
+
+def get_coaching_changes_this_season(conn: sqlite3.Connection, season_year: int) -> list:
+    """Return coaching changes for AI teams that ended in this season."""
+    rows = conn.execute("""
+        SELECT t.abbreviation AS team_abbr,
+               cc.first_name || ' ' || cc.last_name AS old_coach_name,
+               ct.end_reason
+        FROM coach_tenure ct
+        JOIN team t ON ct.team_id = t.id
+        JOIN coach_career cc ON ct.coach_id = cc.id
+        WHERE ct.end_year = ? AND ct.end_reason = 'fired'
+          AND ct.team_id != (SELECT user_team_id FROM league LIMIT 1)
+        ORDER BY t.abbreviation
+    """, (season_year,)).fetchall()
+    result = []
+    for r in rows:
+        # Find the replacement coach (tenure started next year)
+        new_coach = conn.execute("""
+            SELECT cc2.first_name || ' ' || cc2.last_name AS new_coach_name
+            FROM coach_tenure ct2
+            JOIN coach_career cc2 ON ct2.coach_id = cc2.id
+            WHERE ct2.team_id = (
+                SELECT id FROM team WHERE abbreviation = ?
+            ) AND ct2.start_year > ?
+            ORDER BY ct2.start_year ASC LIMIT 1
+        """, (r['team_abbr'], season_year)).fetchone()
+        result.append({
+            'team_abbr': r['team_abbr'],
+            'old_coach_name': r['old_coach_name'],
+            'new_coach_name': new_coach['new_coach_name'] if new_coach else 'TBD',
+            'end_reason': r['end_reason'],
+        })
+    return result
+
+
+def get_user_team_coach_status(conn: sqlite3.Connection, season_year: int) -> Optional[dict]:
+    """Return user team coach name, tenure status, and W-L record."""
+    league = conn.execute("SELECT user_team_id FROM league LIMIT 1").fetchone()
+    if not league:
+        return None
+    team_id = league['user_team_id']
+    ct = conn.execute("""
+        SELECT cc.first_name || ' ' || cc.last_name AS coach_name,
+               ct.end_reason, ct.end_year
+        FROM coach_tenure ct
+        JOIN coach_career cc ON ct.coach_id = cc.id
+        WHERE ct.team_id = ?
+        ORDER BY ct.id DESC LIMIT 1
+    """, (team_id,)).fetchone()
+    rec = conn.execute("""
+        SELECT wins, losses FROM team_season_record WHERE team_id = ? AND season_year = ?
+    """, (team_id, season_year)).fetchone()
+    if not ct:
+        return None
+    if ct['end_year'] is None or ct['end_year'] > season_year:
+        status = 'returning'
+    else:
+        status = ct['end_reason'] or 'departed'
+    return {
+        'coach_name': ct['coach_name'],
+        'status': status,
+        'wins': rec['wins'] if rec else 0,
+        'losses': rec['losses'] if rec else 0,
+    }
+
+
+def get_hof_inductees_for_season(conn: sqlite3.Connection, season_year: int) -> list:
+    """Return HOF inductees for this season."""
+    rows = conn.execute("""
+        SELECT
+            COALESCE(
+                p.first_name || ' ' || p.last_name,
+                cc.first_name || ' ' || cc.last_name,
+                'Unknown'
+            ) AS inductee_name
+        FROM hall_of_fame h
+        LEFT JOIN player p ON h.player_id = p.id
+        LEFT JOIN coach_career cc ON h.coach_id = cc.id
+        WHERE h.inducted_season = ?
+        ORDER BY h.id
+    """, (season_year,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ==============================================================================
+# Phase 5 P11 — Draft Board Polish
+# ==============================================================================
+
+def get_latest_mock_week(conn: sqlite3.Connection, season_year: int):
+    """Return MAX(published_week) for this season_year, or None if no mock exists."""
+    row = conn.execute(
+        "SELECT MAX(published_week) AS w FROM mock_draft WHERE season_year = ?",
+        (season_year,)
+    ).fetchone()
+    return row['w'] if row and row['w'] is not None else None
+
+
+def get_full_mock_draft(conn: sqlite3.Connection, season_year: int) -> list:
+    """Return 32-pick mock (latest published week).
+    Each dict: {overall_pick, prospect_id, prospect_name, prospect_position,
+                team_id, team_abbr, narrative}."""
+    week = get_latest_mock_week(conn, season_year)
+    if week is None:
+        return []
+    rows = conn.execute("""
+        SELECT m.pick_number AS overall_pick,
+               m.prospect_id,
+               p.first_name || ' ' || p.last_name AS prospect_name,
+               p.position AS prospect_position,
+               m.mocking_to_team_id AS team_id,
+               t.abbreviation AS team_abbr,
+               m.narrative
+        FROM mock_draft m
+        JOIN prospect p ON m.prospect_id = p.id
+        JOIN team t ON m.mocking_to_team_id = t.id
+        WHERE m.season_year = ? AND m.published_week = ?
+        ORDER BY m.pick_number
+    """, (season_year, week)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_mock_slot_for_prospect(
+    conn: sqlite3.Connection, prospect_id: int, season_year: int
+) -> dict | None:
+    """Return {pick_number, team_abbr} for this prospect in latest mock, or None."""
+    week = get_latest_mock_week(conn, season_year)
+    if week is None:
+        return None
+    row = conn.execute("""
+        SELECT m.pick_number, t.abbreviation AS team_abbr
+        FROM mock_draft m
+        JOIN team t ON m.mocking_to_team_id = t.id
+        WHERE m.season_year = ? AND m.published_week = ? AND m.prospect_id = ?
+    """, (season_year, week, prospect_id)).fetchone()
+    return dict(row) if row else None
+
+
+def get_top_interest_teams_for_prospect(
+    conn: sqlite3.Connection,
+    prospect_id: int,
+    season_year: int,
+    limit: int = 3,
+) -> list:
+    """Return top N teams showing interest, derived from competitor_intel signal types.
+    Each dict: {team_id, team_abbr, interest_level ('high'/'moderate'/'low')}."""
+    from src.utils.constants import INTEL_SIGNAL_HIGH, INTEL_SIGNAL_MODERATE
+    rows = conn.execute("""
+        SELECT ci.team_id, t.abbreviation AS team_abbr, ci.signal_type
+        FROM competitor_intel ci
+        JOIN team t ON ci.team_id = t.id
+        WHERE ci.prospect_id = ? AND ci.season_year = ?
+        ORDER BY ci.team_id
+    """, (prospect_id, season_year)).fetchall()
+
+    team_best: dict = {}
+    abbr_map: dict = {}
+    for r in rows:
+        sig = r['signal_type']
+        if sig in INTEL_SIGNAL_HIGH:
+            level = 'high'
+        elif sig in INTEL_SIGNAL_MODERATE:
+            level = 'moderate'
+        else:
+            level = 'low'
+        current = team_best.get(r['team_id'])
+        if current is None or level == 'high' or (level == 'moderate' and current == 'low'):
+            team_best[r['team_id']] = level
+        abbr_map[r['team_id']] = r['team_abbr']
+
+    order = {'high': 0, 'moderate': 1, 'low': 2}
+    sorted_teams = sorted(team_best.items(), key=lambda x: order[x[1]])[:limit]
+    return [
+        {'team_id': tid, 'team_abbr': abbr_map[tid], 'interest_level': lvl}
+        for tid, lvl in sorted_teams
+    ]
+
+
+def get_draft_board_with_intel(
+    conn: sqlite3.Connection, team_id: int, season_year: int
+) -> list:
+    """Return draft board rows enriched with mock slot + high-interest team count.
+    Each dict: {board_rank, board_override, prospect_id, prospect_name, position,
+                age, display_grade, phase_trend, mock_slot, high_interest_count}."""
+    week = get_latest_mock_week(conn, season_year)
+    board_rows = conn.execute("""
+        SELECT db.board_rank, db.board_override, db.phase_trend, db.prospect_id,
+               p.first_name || ' ' || p.last_name AS prospect_name,
+               p.position, p.age,
+               sr.scout_grade AS display_grade
+        FROM draft_board db
+        JOIN prospect p ON db.prospect_id = p.id
+        LEFT JOIN (
+            SELECT prospect_id, scout_grade
+            FROM scouted_rating
+            WHERE season_year = ? AND attribute_name = 'true_overall'
+              AND report_week = (
+                  SELECT MAX(report_week) FROM scouted_rating sr2
+                  WHERE sr2.prospect_id = scouted_rating.prospect_id
+                    AND sr2.season_year = ? AND sr2.attribute_name = 'true_overall'
+              )
+        ) sr ON sr.prospect_id = db.prospect_id
+        WHERE db.team_id = ? AND db.season_year = ?
+        ORDER BY COALESCE(db.board_override, db.board_rank) ASC
+    """, (season_year, season_year, team_id, season_year)).fetchall()
+
+    result = []
+    for r in board_rows:
+        pid = r['prospect_id']
+        mock_slot = None
+        if week:
+            mock_row = conn.execute("""
+                SELECT m.pick_number, t.abbreviation AS team_abbr
+                FROM mock_draft m
+                JOIN team t ON m.mocking_to_team_id = t.id
+                WHERE m.season_year = ? AND m.published_week = ? AND m.prospect_id = ?
+            """, (season_year, week, pid)).fetchone()
+            if mock_row:
+                mock_slot = {'pick': mock_row['pick_number'], 'team': mock_row['team_abbr']}
+
+        high_count = conn.execute("""
+            SELECT COUNT(DISTINCT team_id) AS cnt FROM competitor_intel
+            WHERE prospect_id = ? AND season_year = ?
+              AND signal_type IN ('visit', 'private_workout', 'rumored_trade_up')
+        """, (pid, season_year)).fetchone()['cnt']
+
+        entry = dict(r)
+        entry['mock_slot'] = mock_slot
+        entry['high_interest_count'] = high_count
+        result.append(entry)
+    return result
+
+
+def get_positional_run_risks(conn: sqlite3.Connection, season_year: int) -> list:
+    """Detect positional run: ≥THRESHOLD picks of same position in top WINDOW of mock.
+    Returns list of {position, count}."""
+    from src.utils.constants import (
+        DRAFT_BOARD_POSITIONAL_RUN_THRESHOLD,
+        DRAFT_BOARD_POSITIONAL_RUN_TOP_N,
+    )
+    week = get_latest_mock_week(conn, season_year)
+    if week is None:
+        return []
+    rows = conn.execute("""
+        SELECT p.position, COUNT(*) AS cnt
+        FROM mock_draft m
+        JOIN prospect p ON m.prospect_id = p.id
+        WHERE m.season_year = ? AND m.published_week = ? AND m.pick_number <= ?
+        GROUP BY p.position
+        HAVING COUNT(*) >= ?
+        ORDER BY cnt DESC
+    """, (season_year, week,
+          DRAFT_BOARD_POSITIONAL_RUN_TOP_N,
+          DRAFT_BOARD_POSITIONAL_RUN_THRESHOLD)).fetchall()
+    return [{'position': r['position'], 'count': r['cnt']} for r in rows]
+
+
+def get_combine_risers_and_fallers(
+    conn: sqlite3.Connection,
+    season_year: int,
+    min_movement: int = 3,
+    top_n: int = 3,
+) -> dict:
+    """Return {risers: [...], fallers: [...]} based on combine_event.grade_impact.
+    Each entry: {prospect_id, name, position, movement, combine_highlight}."""
+    rows = conn.execute("""
+        SELECT ce.prospect_id, ce.grade_impact, ce.event_type,
+               p.first_name || ' ' || p.last_name AS name, p.position
+        FROM combine_event ce
+        JOIN prospect p ON ce.prospect_id = p.id
+        WHERE ce.season_year = ? AND ABS(ce.grade_impact) >= ?
+        ORDER BY ce.grade_impact DESC
+    """, (season_year, min_movement)).fetchall()
+
+    risers = []
+    fallers = []
+    for r in rows:
+        entry = {
+            'prospect_id': r['prospect_id'],
+            'name': r['name'],
+            'position': r['position'],
+            'movement': r['grade_impact'],
+            'combine_highlight': r['event_type'].replace('_', ' ').title(),
+        }
+        if r['grade_impact'] > 0:
+            risers.append(entry)
+        else:
+            fallers.append(entry)
+
+    return {
+        'risers': risers[:top_n],
+        'fallers': sorted(fallers, key=lambda x: x['movement'])[:top_n],
+    }
+
+
+def get_prospect_combine_with_percentiles(
+    conn: sqlite3.Connection, prospect_id: int
+) -> list:
+    """Return combine measurements + position-relative percentiles.
+    Each dict: {event_name, value, position_group_percentile (0-100)}.
+    Returns empty list if prospect did not attend combine."""
+    from src.utils.constants import COMBINE_POSITION_GROUPS
+
+    p = conn.execute("""
+        SELECT position, combine_forty, combine_bench, combine_vertical,
+               combine_wonderlic, combine_attended
+        FROM prospect WHERE id = ?
+    """, (prospect_id,)).fetchone()
+    if not p or not p['combine_attended']:
+        return []
+
+    pos = p['position']
+    pos_group = 'SKILL'
+    for grp, positions in COMBINE_POSITION_GROUPS.items():
+        if pos in positions:
+            pos_group = grp
+            break
+    group_positions = COMBINE_POSITION_GROUPS.get(pos_group, [pos])
+
+    placeholders = ','.join('?' * len(group_positions))
+    peers = conn.execute(
+        f"SELECT combine_forty, combine_bench, combine_vertical, combine_wonderlic "
+        f"FROM prospect WHERE position IN ({placeholders}) AND combine_attended = 1",
+        group_positions
+    ).fetchall()
+
+    def pct(value, all_vals, lower_is_better=False):
+        if value is None or not all_vals:
+            return 50
+        valid = [v for v in all_vals if v is not None]
+        if not valid:
+            return 50
+        below = sum(1 for v in valid if v < value)
+        rank_pct = int(round(100 * below / len(valid)))
+        return (100 - rank_pct) if lower_is_better else rank_pct
+
+    forty_vals = [r['combine_forty'] for r in peers]
+    bench_vals = [r['combine_bench'] for r in peers]
+    vert_vals  = [r['combine_vertical'] for r in peers]
+    wondr_vals = [r['combine_wonderlic'] for r in peers]
+
+    events = []
+    if p['combine_forty'] is not None:
+        events.append({
+            'event_name': '40-Yard Dash',
+            'value': p['combine_forty'],
+            'position_group_percentile': pct(p['combine_forty'], forty_vals, lower_is_better=True),
+        })
+    if p['combine_bench'] is not None:
+        events.append({
+            'event_name': 'Bench Press',
+            'value': p['combine_bench'],
+            'position_group_percentile': pct(p['combine_bench'], bench_vals),
+        })
+    if p['combine_vertical'] is not None:
+        events.append({
+            'event_name': 'Vertical Jump',
+            'value': p['combine_vertical'],
+            'position_group_percentile': pct(p['combine_vertical'], vert_vals),
+        })
+    if p['combine_wonderlic'] is not None:
+        events.append({
+            'event_name': 'Interview Score',
+            'value': p['combine_wonderlic'],
+            'position_group_percentile': pct(p['combine_wonderlic'], wondr_vals),
+        })
+    return events
+
+
+# ======================
+# DASHBOARD QUERIES
+# ======================
+
+def get_next_game_for_team(
+    conn: sqlite3.Connection,
+    team_id: int,
+    season_year: int,
+    current_week: int,
+) -> Optional[sqlite3.Row]:
+    """Get the next unplayed game for a team in the current season."""
+    return conn.execute("""
+        SELECT g.id, g.home_team_id, g.away_team_id,
+               g.weather_condition, g.wind_speed, g.temperature,
+               g.home_score, g.away_score, g.is_complete,
+               ht.city || ' ' || ht.nickname AS home_name,
+               ht.abbreviation AS home_abbr,
+               ht.city AS home_city,
+               at.city || ' ' || at.nickname AS away_name,
+               at.abbreviation AS away_abbr,
+               at.city AS away_city,
+               w.week_number AS week_num,
+               w.week_type
+        FROM game g
+        JOIN week w ON g.week_id = w.id
+        JOIN season s ON w.season_id = s.id
+        JOIN team ht ON ht.id = g.home_team_id
+        JOIN team at ON at.id = g.away_team_id
+        WHERE (g.home_team_id = ? OR g.away_team_id = ?)
+          AND s.year = ?
+          AND w.week_number >= ?
+          AND g.is_complete = 0
+        ORDER BY w.week_number ASC
+        LIMIT 1
+    """, (team_id, team_id, season_year, current_week)).fetchone()
+
+
+def get_recent_transactions_for_team(
+    conn: sqlite3.Connection,
+    team_id: int,
+    season_year: int,
+    limit: int = 5,
+) -> list[sqlite3.Row]:
+    """Get the most recent transaction log entries for a team in a season."""
+    return conn.execute("""
+        SELECT transaction_type, description, season_year, week_number
+        FROM transaction_log
+        WHERE team_id = ? AND season_year = ?
+        ORDER BY id DESC
+        LIMIT ?
+    """, (team_id, season_year, limit)).fetchall()
+
+
+def get_all_team_records(
+    conn: sqlite3.Connection,
+    season_year: int,
+) -> list[sqlite3.Row]:
+    """Get win/loss records and points for all teams in a season (from game results)."""
+    return conn.execute("""
+        SELECT t.id, t.city || ' ' || t.nickname AS name,
+               t.abbreviation, t.division_id,
+               COALESCE(SUM(CASE
+                   WHEN (g.home_team_id = t.id AND g.home_score > g.away_score)
+                     OR (g.away_team_id = t.id AND g.away_score > g.home_score)
+                   THEN 1 ELSE 0 END), 0) AS wins,
+               COALESCE(SUM(CASE
+                   WHEN (g.home_team_id = t.id AND g.home_score < g.away_score)
+                     OR (g.away_team_id = t.id AND g.away_score < g.home_score)
+                   THEN 1 ELSE 0 END), 0) AS losses,
+               COALESCE(SUM(CASE
+                   WHEN g.home_team_id = t.id THEN g.home_score
+                   WHEN g.away_team_id = t.id THEN g.away_score
+                   ELSE 0 END), 0) AS points_for,
+               COALESCE(SUM(CASE
+                   WHEN g.home_team_id = t.id THEN g.away_score
+                   WHEN g.away_team_id = t.id THEN g.home_score
+                   ELSE 0 END), 0) AS points_against
+        FROM team t
+        LEFT JOIN game g ON (g.home_team_id = t.id OR g.away_team_id = t.id)
+          AND g.is_complete = 1
+          AND g.week_id IN (
+              SELECT w.id FROM week w
+              JOIN season s ON w.season_id = s.id
+              WHERE s.year = ? AND w.week_type = 'regular'
+          )
+        GROUP BY t.id
+        ORDER BY wins DESC, points_for DESC
+    """, (season_year,)).fetchall()
+
+
+# ======================
+# PHASE 6 PROMPT 3 — ROSTER + PLAYER CARD
+# ======================
+
+def get_active_contract_for_player(
+    conn: sqlite3.Connection,
+    player_id: int,
+) -> "Optional[sqlite3.Row]":
+    """Get the active contract for a player, or None if no active contract."""
+    return conn.execute("""
+        SELECT * FROM contract
+        WHERE player_id = ? AND status = 'active'
+        LIMIT 1
+    """, (player_id,)).fetchone()
+
+
+def get_player_season_stats_list(
+    conn: sqlite3.Connection,
+    player_id: int,
+) -> list:
+    """Get all season stat rows for a player, newest first, with team abbr."""
+    return conn.execute("""
+        SELECT pss.*, t.abbreviation AS team_abbr
+        FROM player_season_stats pss
+        JOIN team t ON t.id = pss.team_id
+        WHERE pss.player_id = ?
+        ORDER BY pss.season_year DESC
+    """, (player_id,)).fetchall()
+
+
+def get_player_career_stats_for_player(
+    conn: sqlite3.Connection,
+    player_id: int,
+) -> "Optional[sqlite3.Row]":
+    """Get career stats row for a player."""
+    return conn.execute("""
+        SELECT * FROM player_career_stats WHERE player_id = ?
+    """, (player_id,)).fetchone()
+
+
+def get_roster_counts(
+    conn: sqlite3.Connection,
+    team_id: int,
+) -> list:
+    """Get player counts by roster_status for a team."""
+    return conn.execute("""
+        SELECT roster_status, COUNT(*) AS cnt
+        FROM player
+        WHERE team_id = ? AND is_active = 1
+        GROUP BY roster_status
+    """, (team_id,)).fetchall()
+
+
+def get_player_weekly_awards_all(
+    conn: sqlite3.Connection,
+    player_id: int,
+) -> list:
+    """Get all weekly award rows for a player, newest first."""
+    return conn.execute("""
+        SELECT wa.season_year, wa.week_number, wa.award_type, wa.narrative_blurb
+        FROM weekly_award wa
+        WHERE wa.player_id = ?
+        ORDER BY wa.season_year DESC, wa.week_number DESC
+    """, (player_id,)).fetchall()
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 Prompt 4 — League Section queries
+# ---------------------------------------------------------------------------
+
+def get_standings_full(
+    conn: sqlite3.Connection,
+    season_year: int,
+) -> list:
+    """All 32 teams with W/L/PF/PA + division/conference records for the standings screen."""
+    return conn.execute("""
+        SELECT
+            t.id, t.city || ' ' || t.nickname AS name, t.abbreviation,
+            d.id AS division_id, d.name AS division_name,
+            c.id AS conference_id, c.name AS conference_name,
+            COALESCE(SUM(CASE
+                WHEN (g.home_team_id = t.id AND g.home_score > g.away_score)
+                  OR (g.away_team_id = t.id AND g.away_score > g.home_score) THEN 1 ELSE 0 END), 0) AS wins,
+            COALESCE(SUM(CASE
+                WHEN (g.home_team_id = t.id AND g.home_score < g.away_score)
+                  OR (g.away_team_id = t.id AND g.away_score < g.home_score) THEN 1 ELSE 0 END), 0) AS losses,
+            COALESCE(SUM(CASE
+                WHEN g.home_team_id = t.id THEN g.home_score
+                WHEN g.away_team_id = t.id THEN g.away_score ELSE 0 END), 0) AS pf,
+            COALESCE(SUM(CASE
+                WHEN g.home_team_id = t.id THEN g.away_score
+                WHEN g.away_team_id = t.id THEN g.home_score ELSE 0 END), 0) AS pa,
+            COALESCE(SUM(CASE
+                WHEN (g.home_team_id = t.id AND g.home_score > g.away_score
+                      AND opp.division_id = d.id)
+                  OR (g.away_team_id = t.id AND g.away_score > g.home_score
+                      AND opp.division_id = d.id)
+                THEN 1 ELSE 0 END), 0) AS div_wins,
+            COALESCE(SUM(CASE
+                WHEN (g.home_team_id = t.id AND g.home_score < g.away_score
+                      AND opp.division_id = d.id)
+                  OR (g.away_team_id = t.id AND g.away_score < g.home_score
+                      AND opp.division_id = d.id)
+                THEN 1 ELSE 0 END), 0) AS div_losses,
+            COALESCE(SUM(CASE
+                WHEN (g.home_team_id = t.id AND g.home_score > g.away_score
+                      AND opp_d.conference_id = c.id)
+                  OR (g.away_team_id = t.id AND g.away_score > g.home_score
+                      AND opp_d.conference_id = c.id)
+                THEN 1 ELSE 0 END), 0) AS conf_wins,
+            COALESCE(SUM(CASE
+                WHEN (g.home_team_id = t.id AND g.home_score < g.away_score
+                      AND opp_d.conference_id = c.id)
+                  OR (g.away_team_id = t.id AND g.away_score < g.home_score
+                      AND opp_d.conference_id = c.id)
+                THEN 1 ELSE 0 END), 0) AS conf_losses
+        FROM team t
+        JOIN division d ON t.division_id = d.id
+        JOIN conference c ON d.conference_id = c.id
+        LEFT JOIN game g ON (g.home_team_id = t.id OR g.away_team_id = t.id)
+            AND g.is_complete = 1
+            AND g.week_id IN (
+                SELECT w.id FROM week w
+                JOIN season s ON w.season_id = s.id
+                WHERE s.year = ? AND w.week_type = 'regular'
+            )
+        LEFT JOIN team opp ON opp.id = CASE
+            WHEN g.home_team_id = t.id THEN g.away_team_id
+            ELSE g.home_team_id END
+        LEFT JOIN division opp_d ON opp_d.id = opp.division_id
+        GROUP BY t.id
+        ORDER BY c.name, d.name, wins DESC, (pf - pa) DESC
+    """, (season_year,)).fetchall()
+
+
+def get_all_completed_regular_games(
+    conn: sqlite3.Connection,
+    season_year: int,
+) -> list:
+    """All completed regular-season games for a season, ordered by week then game id."""
+    return conn.execute("""
+        SELECT g.id, g.home_team_id, g.away_team_id, g.home_score, g.away_score,
+               w.week_number
+        FROM game g
+        JOIN week w ON w.id = g.week_id
+        JOIN season s ON s.id = w.season_id
+        WHERE s.year = ? AND w.week_type = 'regular' AND g.is_complete = 1
+        ORDER BY w.week_number, g.id
+    """, (season_year,)).fetchall()
+
+
+def get_league_transactions(
+    conn: sqlite3.Connection,
+    limit: int = 200,
+) -> list:
+    """Most recent transactions league-wide with player and team info."""
+    return conn.execute("""
+        SELECT tl.id, tl.season_year, tl.week_number, tl.transaction_type,
+               tl.description, tl.cap_impact, tl.player_id,
+               p.first_name, p.last_name,
+               t.city || ' ' || t.nickname AS team_name, t.abbreviation AS team_abbr
+        FROM transaction_log tl
+        JOIN team t ON t.id = tl.team_id
+        LEFT JOIN player p ON p.id = tl.player_id
+        ORDER BY tl.id DESC
+        LIMIT ?
+    """, (limit,)).fetchall()
+
+
+def get_fa_players_with_interest(
+    conn: sqlite3.Connection, team_id: int, season_year: int
+) -> list[sqlite3.Row]:
+    """Free agents with this team's interest tier (LEFT JOIN fa_interest)."""
+    return conn.execute("""
+        SELECT p.*, fi.tier AS interest_tier, fi.preference_score
+        FROM player p
+        LEFT JOIN fa_interest fi
+            ON fi.player_id = p.id
+            AND fi.team_id = ?
+            AND fi.season_year = ?
+        WHERE p.roster_status = 'free_agent' AND p.is_active = 1
+        ORDER BY p.true_overall DESC
+    """, (team_id, season_year)).fetchall()
+
+
+def get_fa_player_contract_history(
+    conn: sqlite3.Connection, player_id: int
+) -> list[sqlite3.Row]:
+    """Expired/voided contracts for a player with team info, most recent first."""
+    return conn.execute("""
+        SELECT c.*, t.city, t.nickname, t.abbreviation,
+               MIN(cy.season_year) AS first_year,
+               MAX(cy.season_year) AS last_year
+        FROM contract c
+        JOIN team t ON c.team_id = t.id
+        LEFT JOIN contract_year cy ON cy.contract_id = c.id
+        WHERE c.player_id = ?
+          AND c.status IN ('expired', 'voided', 'restructured')
+        GROUP BY c.id
+        ORDER BY first_year DESC
+    """, (player_id,)).fetchall()
+
+
+def get_team_positional_counts(conn: sqlite3.Connection, team_id: int) -> dict:
+    """Return {position: count} for active roster players."""
+    rows = conn.execute("""
+        SELECT position, COUNT(*) AS cnt FROM player
+        WHERE team_id = ? AND roster_status = 'active' AND is_active = 1
+        GROUP BY position
+    """, (team_id,)).fetchall()
+    return {r["position"]: r["cnt"] for r in rows}
