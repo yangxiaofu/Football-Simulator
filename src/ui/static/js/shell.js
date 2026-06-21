@@ -16,6 +16,32 @@ import { init as gameRecapInit }    from './screens/game_recap.js';
 import { init as frontOfficeInit }  from './screens/front_office.js';
 import { init as faMarketInit }     from './screens/fa_market.js';
 import { init as faPlayerInit }     from './screens/fa_player.js';
+import { init as tradeHubInit }     from './screens/trade_hub.js';
+import { init as tradeBlockInit }   from './screens/trade_block.js';
+import { init as incomingTradesInit } from './screens/incoming_trades.js';
+import { init as tradeBuilderInit } from './screens/trade_builder.js';
+import { init as scoutingHubInit }  from './screens/scouting_hub.js';
+import { init as draftClassInit }   from './screens/draft_class.js';
+import { init as prospectCardInit } from './screens/prospect_card.js';
+import { init as scoutAssignInit }  from './screens/scout_assignments.js';
+import { init as draftBoardInit }   from './screens/draft_board.js';
+import { init as draftRoomInit }    from './screens/draft_room.js';
+import { init as seasonReviewInit }    from './screens/season_review.js';
+import { init as playoffBracketInit }  from './screens/playoff_bracket.js';
+import { init as superBowlRecapInit }  from './screens/super_bowl_recap.js';
+import { init as combineResultsInit }  from './screens/combine_results.js';
+import { init as postDraftReviewInit } from './screens/post_draft_review.js';
+import { init as pastSeasonInit }      from './screens/past_season.js';
+import { init as dynastyHubInit }         from './screens/dynasty_hub.js';
+import { init as franchiseHistoryInit }   from './screens/franchise_history.js';
+import { init as seasonArchiveInit }      from './screens/season_archive.js';
+import { init as awardsHistoryInit }      from './screens/awards_history.js';
+import { init as legacyTrackerInit }      from './screens/legacy_tracker.js';
+import { init as retiredPlayerInit }      from './screens/retired_player.js';
+import { init as loadFranchiseInit }      from './screens/load_franchise.js';
+import { init as settingsScreenInit }     from './screens/settings_screen.js';
+import { init as helpScreenInit }         from './screens/help_screen.js';
+import { init as schemeSettingsInit }     from './screens/scheme_settings.js';
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
@@ -36,8 +62,33 @@ const ROUTES = {
   '/front-office':                  async () => { const c = getContent(); c.innerHTML = ''; await frontOfficeInit(c); },
   '/front-office/fa-market':        async () => { const c = getContent(); c.innerHTML = ''; await faMarketInit(c); },
   '/front-office/fa-player/:id':    async (params) => { const c = getContent(); c.innerHTML = ''; await faPlayerInit(c, params); },
+  '/front-office/trade-center':     async () => { const c = getContent(); c.innerHTML = ''; await tradeHubInit(c); },
+  '/front-office/trade-block':      async () => { const c = getContent(); c.innerHTML = ''; await tradeBlockInit(c); },
+  '/front-office/incoming-trades':  async () => { const c = getContent(); c.innerHTML = ''; await incomingTradesInit(c); },
+  '/front-office/trade-builder':    async () => { const c = getContent(); c.innerHTML = ''; await tradeBuilderInit(c); },
+  '/front-office/scouting':             async () => { const c = getContent(); c.innerHTML = ''; await scoutingHubInit(c); },
+  '/front-office/scouting/draft-class': async () => { const c = getContent(); c.innerHTML = ''; await draftClassInit(c); },
+  '/front-office/scouting/prospect/:id': async (params) => { const c = getContent(); c.innerHTML = ''; await prospectCardInit(c, params); },
+  '/front-office/scouting/assignments': async () => { const c = getContent(); c.innerHTML = ''; await scoutAssignInit(c); },
+  '/front-office/scouting/draft-board': async () => { const c = getContent(); c.innerHTML = ''; await draftBoardInit(c); },
+  '/front-office/draft':                async () => { const c = getContent(); c.innerHTML = ''; await draftRoomInit(c); },
+  '/front-office/season-review':        async () => { const c = getContent(); c.innerHTML = ''; await seasonReviewInit(c); },
+  '/playoff/bracket':                   async () => { const c = getContent(); c.innerHTML = ''; await playoffBracketInit(c); },
+  '/playoff/super-bowl':                async () => { const c = getContent(); c.innerHTML = ''; await superBowlRecapInit(c); },
+  '/front-office/combine-results':      async () => { const c = getContent(); c.innerHTML = ''; await combineResultsInit(c); },
+  '/front-office/post-draft-review':    async () => { const c = getContent(); c.innerHTML = ''; await postDraftReviewInit(c); },
+  '/history/season/:year':              async (params) => { const c = getContent(); c.innerHTML = ''; await pastSeasonInit(c, params); },
   '/placeholder':             () => renderPlaceholderScreen(),
-  '/dynasty':                 () => renderPlaceholder('Dynasty', '(5.11)'),
+  '/dynasty':                       async ()       => { const c = getContent(); c.innerHTML = ''; await dynastyHubInit(c); },
+  '/dynasty/franchise-history':     async ()       => { const c = getContent(); c.innerHTML = ''; await franchiseHistoryInit(c); },
+  '/dynasty/season-archive':        async ()       => { const c = getContent(); c.innerHTML = ''; await seasonArchiveInit(c); },
+  '/dynasty/awards':                async ()       => { const c = getContent(); c.innerHTML = ''; await awardsHistoryInit(c); },
+  '/dynasty/legacy':                async ()       => { const c = getContent(); c.innerHTML = ''; await legacyTrackerInit(c); },
+  '/dynasty/player/:id':            async (params) => { const c = getContent(); c.innerHTML = ''; await retiredPlayerInit(c, params); },
+  '/load-franchise':                async ()       => { const c = getContent(); c.innerHTML = ''; await loadFranchiseInit(c); },
+  '/settings':                      async ()       => { const c = getContent(); c.innerHTML = ''; await settingsScreenInit(c); },
+  '/help':                          async ()       => { const c = getContent(); c.innerHTML = ''; await helpScreenInit(c); },
+  '/team/scheme':                   async ()       => { const c = getContent(); c.innerHTML = ''; await schemeSettingsInit(c); },
 };
 
 const DEFAULT_ROUTE = '/team/dashboard';
@@ -71,6 +122,12 @@ function matchRoute(path) {
   }
   const faPlayerMatch = path.match(/^\/front-office\/fa-player\/(\d+)$/);
   if (faPlayerMatch) return { handler: ROUTES['/front-office/fa-player/:id'], params: { playerId: parseInt(faPlayerMatch[1]) } };
+  const prospectMatch = path.match(/^\/front-office\/scouting\/prospect\/(\d+)$/);
+  if (prospectMatch) return { handler: ROUTES['/front-office/scouting/prospect/:id'], params: { prospectId: parseInt(prospectMatch[1]) } };
+  const pastSeasonMatch = path.match(/^\/history\/season\/(\d+)$/);
+  if (pastSeasonMatch) return { handler: ROUTES['/history/season/:year'], params: { year: parseInt(pastSeasonMatch[1]) } };
+  const dynastyPlayerMatch = path.match(/^\/dynasty\/player\/(\d+)$/);
+  if (dynastyPlayerMatch) return { handler: ROUTES['/dynasty/player/:id'], params: { playerId: parseInt(dynastyPlayerMatch[1]) } };
   if (path.match(/^\/placeholder(\/.*)?$/)) return { handler: ROUTES['/placeholder'], params: {} };
   return { handler: ROUTES[DEFAULT_ROUTE], params: {} };
 }
@@ -121,7 +178,7 @@ const TEAM_SUB_NAV = [
   { label: 'Practice',     route: null,               active: false },
   { label: 'Cap',          route: null,               active: false },
   { label: 'Staff',        route: null,               active: false },
-  { label: 'Scheme',       route: null,               active: false },
+  { label: 'Scheme',       route: '#/team/scheme',    active: false },
 ];
 
 const LEAGUE_SUB_NAV = [
@@ -283,8 +340,59 @@ function wireContinueButton() {
 
 window.addEventListener('hashchange', router);
 
-window.addEventListener('DOMContentLoaded', async () => {
+function _showGameShell() {
+  document.getElementById('app-shell').classList.remove('hidden');
+}
+
+function _wireSettingsButton() {
+  document.getElementById('btn-settings')
+    ?.addEventListener('click', () => { location.hash = '#/settings'; });
+}
+
+function _wireTitleScreen() {
+  document.getElementById('btn-new-franchise').addEventListener('click', () => {
+    alert(
+      'To create a new franchise, run:\n' +
+      '  python generate.py saves/my_team.db --season 2024\n\n' +
+      'Then use "Load Franchise" to open it here.'
+    );
+  });
+  document.getElementById('btn-load-franchise').addEventListener('click', () => {
+    document.getElementById('title-screen').classList.add('hidden');
+    _showGameShell();
+    location.hash = '#/load-franchise';
+    router();
+  });
+  document.getElementById('btn-title-settings').addEventListener('click', () => {
+    document.getElementById('title-screen').classList.add('hidden');
+    _showGameShell();
+    location.hash = '#/settings';
+    router();
+  });
+}
+
+// Called by load_franchise.js after doLoadFranchise succeeds.
+// Populates the context bar, wires the Continue button, and navigates to dashboard.
+window.onFranchiseLoaded = async function onFranchiseLoaded(_appInfo) {
   await loadContextBar();
   wireContinueButton();
-  router();
+  _wireSettingsButton();
+  location.hash = '#/team/dashboard';
+  // hashchange fires router() automatically
+};
+
+window.addEventListener('DOMContentLoaded', async () => {
+  const info = await api.getAppInfo();
+  if (!info || info.ok === false) {
+    // No franchise loaded at launch → show Title Screen
+    document.getElementById('title-screen').classList.remove('hidden');
+    _wireTitleScreen();
+  } else {
+    // Save path was passed at launch → skip Title Screen, go straight to game shell
+    _showGameShell();
+    await loadContextBar();
+    wireContinueButton();
+    _wireSettingsButton();
+    router();
+  }
 });

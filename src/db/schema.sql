@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS team (
     waiver_priority     INTEGER NOT NULL,        -- 1-32; 1 = highest priority
     fan_sentiment       INTEGER NOT NULL DEFAULT 50,  -- 0-100
     team_phase          TEXT NOT NULL DEFAULT 'bridge', -- 'rebuild' | 'bridge' | 'contend' | 'win_now' | 'decline'
+    scheme_offense      TEXT NOT NULL DEFAULT 'pro_style', -- key in SCHEME_ATTRIBUTE_MAP_OFFENSE
+    scheme_defense      TEXT NOT NULL DEFAULT '4_3',       -- key in SCHEME_ATTRIBUTE_MAP_DEFENSE
     FOREIGN KEY (division_id) REFERENCES division(id)
 );
 
@@ -136,6 +138,7 @@ CREATE TABLE IF NOT EXISTS player (
     injury_status       TEXT,                           -- NULL | 'questionable' | 'doubtful' | 'out'
     injury_weeks_remaining INTEGER DEFAULT 0,
     is_watchlisted      INTEGER NOT NULL DEFAULT 0,      -- GUI FA watchlist flag (Phase 6 P7b)
+    is_on_trade_block   INTEGER NOT NULL DEFAULT 0,      -- GUI Trade Block flag (Phase 6 P8)
 
     FOREIGN KEY (team_id) REFERENCES team(id)
 );

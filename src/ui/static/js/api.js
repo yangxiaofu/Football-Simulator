@@ -124,6 +124,149 @@ export const api = {
   async doRestructureContract(playerId, newTerms) {
     return (await bridge()).do_restructure_contract(playerId, newTerms);
   },
+
+  // --- Phase 6 P8: Scouting + Trade reads ---
+  async getScoutDashboard() {
+    return (await bridge()).get_scout_dashboard();
+  },
+  async getProspectList(filters = null) {
+    return (await bridge()).get_prospect_list(filters);
+  },
+  async getProspectCard(prospectId) {
+    return (await bridge()).get_prospect_card(prospectId);
+  },
+  async getScoutAssignments() {
+    return (await bridge()).get_scout_assignments();
+  },
+  async getDraftBoard() {
+    return (await bridge()).get_draft_board();
+  },
+  async getTradeHub() {
+    return (await bridge()).get_trade_hub();
+  },
+  async getTradeBlock() {
+    return (await bridge()).get_trade_block();
+  },
+  async getIncomingOffers() {
+    return (await bridge()).get_incoming_offers();
+  },
+  async getAllTeams() {
+    return (await bridge()).get_all_teams();
+  },
+  async getTradeBuilderContext(theirTeamId) {
+    return (await bridge()).get_trade_builder_context(theirTeamId);
+  },
+  async getTradePreview(myPlayerIds, myPickCodes, theirPlayerIds, theirPickCodes, theirTeamId) {
+    return (await bridge()).get_trade_preview(
+      myPlayerIds || [], myPickCodes || [],
+      theirPlayerIds || [], theirPickCodes || [],
+      theirTeamId,
+    );
+  },
+
+  // --- Phase 6 P8: Scouting + Trade mutations ---
+  async doProposeTrade(theirTeamId, myAssets, theirAssets) {
+    return (await bridge()).do_propose_trade(theirTeamId, myAssets, theirAssets);
+  },
+  async doRespondToTrade(tradeId, response) {
+    return (await bridge()).do_respond_to_trade(tradeId, response);
+  },
+  async doCounterTrade(tradeId, myAssets, theirAssets) {
+    return (await bridge()).do_counter_trade(tradeId, myAssets, theirAssets);
+  },
+  async doAddToTradeBlock(playerId) {
+    return (await bridge()).do_add_to_trade_block(playerId);
+  },
+  async doRemoveFromTradeBlock(playerId) {
+    return (await bridge()).do_remove_from_trade_block(playerId);
+  },
+  async doAssignScout(scoutId, prospectIds) {
+    return (await bridge()).do_assign_scout(scoutId, prospectIds);
+  },
+  async doSetBoardRank(prospectId, newRank) {
+    return (await bridge()).do_set_board_rank(prospectId, newRank);
+  },
+
+  // Draft Room (F-60) — Prompt 9a
+  async getDraftRoom() {
+    return (await bridge()).get_draft_room();
+  },
+  async getAvailableBoard() {
+    return (await bridge()).get_available_board();
+  },
+  async doInitializeDraft() {
+    return (await bridge()).do_initialize_draft();
+  },
+  async doMakePick(prospectId) {
+    return (await bridge()).do_make_pick(prospectId);
+  },
+  async doSimAiPicks(untilUserPick = false) {
+    return (await bridge()).do_sim_ai_picks(untilUserPick);
+  },
+
+  // Season Review (F-10) — Prompt 10
+  async getSeasonReview() {
+    return (await bridge()).get_season_review();
+  },
+
+  // Playoff Bracket + Super Bowl Recap (S-08, S-11) — Prompt 10b
+  async getPlayoffBracket() {
+    return (await bridge()).get_playoff_bracket();
+  },
+  async getSuperBowlRecap() {
+    return (await bridge()).get_super_bowl_recap();
+  },
+
+  // Milestone 5.10c: Combine Results (F-34), Post-Draft Review (F-62), Past Season (D-04)
+  async getCombineResults() {
+    return (await bridge()).get_combine_results();
+  },
+  async getPostDraftReview() {
+    return (await bridge()).get_post_draft_review();
+  },
+  async getPastSeason(year) {
+    return (await bridge()).get_past_season({ season_year: year });
+  },
+
+  // Milestone 5.11: Dynasty Section (D-01, D-02, D-03, D-05, D-06, D-07)
+  async getDynastyHub() {
+    return (await bridge()).get_dynasty_hub();
+  },
+  async getFranchiseHistory() {
+    return (await bridge()).get_franchise_history();
+  },
+  async getSeasonArchive() {
+    return (await bridge()).get_season_archive();
+  },
+  async getAwardsHistory() {
+    return (await bridge()).get_awards_history();
+  },
+  async getLegacyTracker() {
+    return (await bridge()).get_legacy_tracker();
+  },
+  async getRetiredPlayer(playerId) {
+    return (await bridge()).get_retired_player({ player_id: playerId });
+  },
+
+  // Milestone 5.12: Title Screen / Load Franchise / Settings / Scheme
+  async getSaveFiles() {
+    return (await bridge()).get_save_files();
+  },
+  async doLoadFranchise(path) {
+    return (await bridge()).do_load_franchise(path);
+  },
+  async getSettings() {
+    return (await bridge()).get_settings();
+  },
+  async doSaveSettings(settings) {
+    return (await bridge()).do_save_settings(settings);
+  },
+  async getSchemeSettings() {
+    return (await bridge()).get_scheme_settings();
+  },
+  async doUpdateScheme(offense, defense) {
+    return (await bridge()).do_update_scheme(offense, defense);
+  },
 };
 
 // Polling constants mirror src/utils/constants.py

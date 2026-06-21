@@ -50,6 +50,8 @@ def get_connection(save_path: str) -> sqlite3.Connection:
     ensure_in_season_stats_tables(conn)
     ensure_depth_chart_table(conn)
     ensure_player_watchlist_column(conn)
+    ensure_player_trade_block_column(conn)
+    ensure_scheme_columns(conn)
 
     return conn
 
@@ -677,6 +679,27 @@ def ensure_player_watchlist_column(conn: sqlite3.Connection) -> None:
         conn: Database connection
     """
     _safe_add_column(conn, 'player', 'is_watchlisted', "INTEGER NOT NULL DEFAULT 0")
+    conn.commit()
+
+
+def ensure_player_trade_block_column(conn: sqlite3.Connection) -> None:
+    """Add is_on_trade_block column to player for the GUI Trade Block (Phase 6 P8).
+
+    Safe to call multiple times. Forward-migrates saves created before the
+    trade-block flag existed.
+    """
+    _safe_add_column(conn, 'player', 'is_on_trade_block', "INTEGER NOT NULL DEFAULT 0")
+    conn.commit()
+
+
+def ensure_scheme_columns(conn: sqlite3.Connection) -> None:
+    """Add scheme_offense and scheme_defense columns to team (Milestone 5.12).
+
+    Safe to call multiple times. Forward-migrates saves created before
+    scheme settings existed. Defaults match valid keys in SCHEME_ATTRIBUTE_MAP_*.
+    """
+    _safe_add_column(conn, 'team', 'scheme_offense', "TEXT NOT NULL DEFAULT 'pro_style'")
+    _safe_add_column(conn, 'team', 'scheme_defense', "TEXT NOT NULL DEFAULT '4_3'")
     conn.commit()
 
 
